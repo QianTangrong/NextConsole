@@ -34,13 +34,14 @@ export class ElementCore {
     const attrs = this.renderAttributes(node);
     const hasChildren = node.children.length > 0;
     const id = `nc-dom-${depth}-${tag}-${Math.random().toString(36).slice(2, 8)}`;
+    const selector = escapeHTML(this.getSelector(node));
 
     let html = '';
 
     if (hasChildren) {
       html += `<div class="${ncClass('dom-node', 'dom-collapsible')}" style="padding-left:${depth * 16}px">`;
       html += `<span class="${ncClass('dom-toggle')}" data-nc-toggle="${id}">▶</span> `;
-      html += `<span class="${ncClass('dom-tag')}" data-nc-highlight="${this.getSelector(node)}">&lt;${escapeHTML(tag)}</span>`;
+      html += `<span class="${ncClass('dom-tag')}" data-nc-highlight="${selector}">&lt;${escapeHTML(tag)}</span>`;
       html += attrs;
       html += `<span class="${ncClass('dom-tag')}">&gt;</span>`;
       html += `</div>`;
@@ -56,7 +57,7 @@ export class ElementCore {
       const text = node.textContent?.trim();
       const textPreview = text && text.length > 0 ? escapeHTML(text.slice(0, 60)) : '';
       html += `<div class="${ncClass('dom-node')}" style="padding-left:${depth * 16}px">`;
-      html += `<span class="${ncClass('dom-tag')}" data-nc-highlight="${this.getSelector(node)}">&lt;${escapeHTML(tag)}</span>`;
+      html += `<span class="${ncClass('dom-tag')}" data-nc-highlight="${selector}">&lt;${escapeHTML(tag)}</span>`;
       html += attrs;
       if (textPreview) {
         html += `<span class="${ncClass('dom-tag')}">&gt;</span>`;

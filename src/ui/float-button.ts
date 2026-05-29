@@ -12,6 +12,9 @@ export class FloatButton {
   private startY = 0;
   private offsetX = 0;
   private offsetY = 0;
+  private currentX = 0;
+  private currentY = 0;
+  private snapTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private container: ShadowRoot,
@@ -35,8 +38,10 @@ export class FloatButton {
   private setPosition(x: number, y: number): void {
     const maxX = window.innerWidth - 48;
     const maxY = window.innerHeight - 48;
-    this.el.style.left = `${clamp(x, 0, maxX)}px`;
-    this.el.style.top = `${clamp(y, 0, maxY)}px`;
+    this.currentX = clamp(x, 0, maxX);
+    this.currentY = clamp(y, 0, maxY);
+    this.el.style.left = `${this.currentX}px`;
+    this.el.style.top = `${this.currentY}px`;
   }
 
   private bindEvents(): void {
@@ -127,17 +132,31 @@ export class FloatButton {
         }
       }),
     );
+
+    const keepInViewport = () => {
+      this.setPosition(this.currentX, this.currentY);
+    };
+
+    this.cleanups.push(
+      on(window as any, 'resize', keepInViewport),
+      on(window as any, 'orientationchange' as any, keepInViewport),
+    );
   }
 
   /** Snap button to nearest horizontal edge */
   private snapToEdge(): void {
     const x = this.el.offsetLeft;
     const midX = window.innerWidth / 2;
-    const targetX = x < midX ? 8 : window.innerWidth - 56;
+    const targetX = clamp(x < midX ? 8 : window.innerWidth - 56, 0, window.innerWidth - 48);
+    this.currentX = targetX;
     this.el.style.transition = 'left 0.2s ease';
     this.el.style.left = `${targetX}px`;
-    setTimeout(() => {
+    if (this.snapTimer !== null) {
+      clearTimeout(this.snapTimer);
+    }
+    this.snapTimer = setTimeout(() => {
       this.el.style.transition = '';
+      this.snapTimer = null;
     }, 200);
   }
 
@@ -150,6 +169,10 @@ export class FloatButton {
   }
 
   destroy(): void {
+    if (this.snapTimer !== null) {
+      clearTimeout(this.snapTimer);
+      this.snapTimer = null;
+    }
     this.cleanups.forEach((fn) => fn());
     this.cleanups.length = 0;
     this.el.remove();

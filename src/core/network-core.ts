@@ -17,6 +17,50 @@ const DEFAULT_OPTIONS: NetworkOptions = {
 };
 
 const MAX_MESSAGES = 1000;
+const MAX_BODY_PREVIEW_CHARS = 10000;
+const STREAMING_CONTENT_TYPES = [
+  'text/event-stream',
+  'application/x-ndjson',
+  'application/json-seq',
+  'application/jsonl',
+];
+const BINARY_CONTENT_TYPES = [
+  'application/octet-stream',
+  'application/pdf',
+  'application/zip',
+  'application/gzip',
+  'application/x-tar',
+  'application/x-7z-compressed',
+];
+
+function isRequest(input: RequestInfo | URL): input is Request {
+  return typeof Request !== 'undefined' && input instanceof Request;
+}
+
+function getFetchURL(input: RequestInfo | URL): string {
+  if (typeof input === 'string') return input;
+  if (input instanceof URL) return input.href;
+  return input.url;
+}
+
+function getFetchMethod(input: RequestInfo | URL, init?: RequestInit): string {
+  return (init?.method || (isRequest(input) ? input.method : 'GET')).toUpperCase();
+}
+
+function collectFetchHeaders(input: RequestInfo | URL, init?: RequestInit): Record<string, string> {
+  const headers = new Headers(isRequest(input) ? input.headers : undefined);
+  if (init?.headers) {
+    new Headers(init.headers).forEach((value, key) => headers.set(key, value));
+  }
+
+  const result: Record<string, string> = {};
+  headers.forEach((value, key) => (result[key] = value));
+  return result;
+}
+
+function getEventCapture(options?: boolean | AddEventListenerOptions | EventListenerOptions): boolean {
+  return typeof options === 'boolean' ? options : Boolean(options?.capture);
+}
 
 /** Serialize request body for display */
 function serializeBody(body: unknown): unknown {
@@ -32,6 +76,46 @@ function serializeBody(body: unknown): unknown {
   if (body instanceof ArrayBuffer) return `[ArrayBuffer: ${body.byteLength} bytes]`;
   if (ArrayBuffer.isView(body)) return `[${body.constructor.name}: ${body.byteLength} bytes]`;
   return String(body);
+}
+
+function serializeXHRResponse(xhr: XMLHttpRequest): unknown {
+  const responseType = xhr.responseType || 'text';
+
+  if (responseType === 'json') {
+    return xhr.response;
+  }
+  if (responseType === 'blob') {
+    const blob = xhr.response as Blob | null;
+    return blob ? `[Blob: ${blob.size} bytes]` : '[Blob]';
+  }
+  if (responseType === 'arraybuffer') {
+    const buffer = xhr.response as ArrayBuffer | null;
+    return buffer ? `[ArrayBuffer: ${buffer.byteLength} bytes]` : '[ArrayBuffer]';
+  }
+  if (responseType === 'document') {
+    const doc = xhr.response as Document | null;
+    return doc ? `[Document: ${doc.contentType || 'unknown'}]` : '[Document]';
+  }
+
+  try {
+    const contentType = xhr.getResponseHeader('content-type') || '';
+    const text = xhr.responseText || '';
+    const bodyText = text.length > MAX_BODY_PREVIEW_CHARS
+      ? `${text.slice(0, MAX_BODY_PREVIEW_CHARS)}...(truncated)`
+      : text;
+
+    if (contentType.includes('application/json')) {
+      try {
+        return JSON.parse(text);
+      } catch {
+        return bodyText;
+      }
+    }
+
+    return bodyText;
+  } catch {
+    return '[Unable to read body]';
+  }
 }
 
 /**
@@ -69,14 +153,9 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
     const origFetch = this.originalFetch;
 
     window.fetch = async function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-      const method = (init?.method || 'GET').toUpperCase();
-      const requestHeaders: Record<string, string> = {};
-
-      if (init?.headers) {
-        const h = new Headers(init.headers);
-        h.forEach((v, k) => (requestHeaders[k] = v));
-      }
+      const url = getFetchURL(input);
+      const method = getFetchMethod(input, init);
+      const requestHeaders = collectFetchHeaders(input, init);
 
       const entry: NetworkEntry = {
         id: nextId(),
@@ -107,21 +186,8 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
         entry.duration = entry.endTime - entry.startTime;
         entry.pending = false;
 
-        // Clone response to read body without consuming it
-        const clone = response.clone();
-        try {
-          const contentType = response.headers.get('content-type') || '';
-          if (contentType.includes('application/json')) {
-            entry.responseBody = await clone.json();
-          } else {
-            const text = await clone.text();
-            entry.responseBody = text.length > 10000 ? text.slice(0, 10000) + '...(truncated)' : text;
-          }
-        } catch {
-          entry.responseBody = '[Unable to read body]';
-        }
-
         self.emit('update', entry);
+        void self.captureFetchBody(response, entry, method);
         return response;
       } catch (err) {
         entry.endTime = performance.now();
@@ -132,6 +198,103 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
         throw err;
       }
     };
+  }
+
+  private async captureFetchBody(response: Response, entry: NetworkEntry, method: string): Promise<void> {
+    const skipReason = this.getBodySkipReason(response, method);
+    if (skipReason === null) return;
+    if (skipReason) {
+      entry.responseBody = skipReason;
+      this.emit('update', entry);
+      return;
+    }
+
+    let clone: Response;
+    try {
+      clone = response.clone();
+    } catch {
+      entry.responseBody = '[Unable to read body]';
+      this.emit('update', entry);
+      return;
+    }
+
+    try {
+      const contentType = response.headers.get('content-type')?.toLowerCase() || '';
+      const preview = await this.readTextPreview(clone, MAX_BODY_PREVIEW_CHARS);
+      const bodyText = preview.truncated ? `${preview.text}...(truncated)` : preview.text;
+
+      if (!preview.truncated && contentType.includes('json')) {
+        try {
+          entry.responseBody = JSON.parse(preview.text);
+        } catch {
+          entry.responseBody = bodyText;
+        }
+      } else {
+        entry.responseBody = bodyText;
+      }
+    } catch {
+      entry.responseBody = '[Unable to read body]';
+    }
+
+    this.emit('update', entry);
+  }
+
+  private getBodySkipReason(response: Response, method: string): string | null | undefined {
+    if (method === 'HEAD' || [204, 205, 304].includes(response.status) || !response.body) {
+      return null;
+    }
+
+    const contentType = response.headers.get('content-type')?.toLowerCase() || '';
+    if (STREAMING_CONTENT_TYPES.some((type) => contentType.includes(type)) || contentType.includes('stream')) {
+      return '[Streaming response body omitted]';
+    }
+    if (
+      contentType.startsWith('image/') ||
+      contentType.startsWith('audio/') ||
+      contentType.startsWith('video/') ||
+      contentType.startsWith('font/') ||
+      BINARY_CONTENT_TYPES.some((type) => contentType.includes(type))
+    ) {
+      return '[Binary response body omitted]';
+    }
+
+    return undefined;
+  }
+
+  private async readTextPreview(response: Response, maxChars: number): Promise<{ text: string; truncated: boolean }> {
+    if (!response.body) return { text: '', truncated: false };
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let text = '';
+    let truncated = false;
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        text += decoder.decode(value, { stream: true });
+        if (text.length > maxChars) {
+          text = text.slice(0, maxChars);
+          truncated = true;
+          await reader.cancel();
+          break;
+        }
+      }
+
+      if (!truncated) {
+        text += decoder.decode();
+      }
+    } finally {
+      try {
+        reader.releaseLock();
+      } catch {
+        // Reader may already be released after cancelation in some browsers.
+      }
+    }
+
+    return { text, truncated };
   }
 
   private hookXHR(): void {
@@ -208,17 +371,7 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
             });
           }
 
-          try {
-            const ct = this.getResponseHeader('content-type') || '';
-            if (ct.includes('application/json')) {
-              entry.responseBody = JSON.parse(this.responseText);
-            } else {
-              const text = this.responseText;
-              entry.responseBody = text.length > 10000 ? text.slice(0, 10000) + '...(truncated)' : text;
-            }
-          } catch {
-            entry.responseBody = this.responseText || '[Unable to read body]';
-          }
+          entry.responseBody = serializeXHRResponse(this);
 
           self.emit('update', entry);
         });
@@ -272,40 +425,79 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
 
       // Capture all messages (including named events via onmessage)
       const origAddEventListener = es.addEventListener.bind(es);
-      (es as any).addEventListener = function (type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions) {
+      const origRemoveEventListener = es.removeEventListener.bind(es);
+      const wrappedListeners = new Map<string, WeakMap<EventListenerOrEventListenerObject, Map<boolean, EventListener>>>();
+
+      (es as any).addEventListener = function (type: string, listener: EventListenerOrEventListenerObject | null, options?: boolean | AddEventListenerOptions) {
+        if (!listener) {
+          return origAddEventListener(type, listener as unknown as EventListenerOrEventListenerObject, options);
+        }
         if (type !== 'open' && type !== 'error' && type !== 'message') {
           // Wrap to capture named events (message events are captured by the internal handler below)
-          const wrappedListener = function (e: Event) {
-            const me = e as MessageEvent;
-            const sseEvent: SSEEvent = {
-              data: me.data,
-              timestamp: Date.now(),
-              id: me.lastEventId || undefined,
-              event: type === 'message' ? undefined : type,
-            };
-            entry.sseEvents!.push(sseEvent);
-            const msg: StreamMessage = {
-              direction: 'in',
-              data: me.data,
-              timestamp: Date.now(),
-              event: type === 'message' ? undefined : type,
-              size: typeof me.data === 'string' ? me.data.length : 0,
-            };
-            if (entry.messages!.length >= MAX_MESSAGES) {
-              entry.messages!.splice(0, entry.messages!.length - MAX_MESSAGES + 100);
-            }
-            entry.messages!.push(msg);
-            self.emit('update', entry);
+          const capture = getEventCapture(options);
+          let listenersForType = wrappedListeners.get(type);
+          if (!listenersForType) {
+            listenersForType = new WeakMap();
+            wrappedListeners.set(type, listenersForType);
+          }
 
-            if (typeof listener === 'function') {
-              listener.call(es, e);
-            } else {
-              listener.handleEvent(e);
-            }
-          };
+          let listenersForOptions = listenersForType.get(listener);
+          if (!listenersForOptions) {
+            listenersForOptions = new Map();
+            listenersForType.set(listener, listenersForOptions);
+          }
+
+          let wrappedListener = listenersForOptions.get(capture);
+          if (!wrappedListener) {
+            wrappedListener = function (e: Event) {
+              const me = e as MessageEvent;
+              const sseEvent: SSEEvent = {
+                data: me.data,
+                timestamp: Date.now(),
+                id: me.lastEventId || undefined,
+                event: type,
+              };
+              entry.sseEvents!.push(sseEvent);
+              const msg: StreamMessage = {
+                direction: 'in',
+                data: me.data,
+                timestamp: Date.now(),
+                event: type,
+                size: typeof me.data === 'string' ? me.data.length : 0,
+              };
+              if (entry.messages!.length >= MAX_MESSAGES) {
+                entry.messages!.splice(0, entry.messages!.length - MAX_MESSAGES + 100);
+              }
+              entry.messages!.push(msg);
+              self.emit('update', entry);
+
+              if (typeof listener === 'function') {
+                listener.call(es, e);
+              } else {
+                listener.handleEvent(e);
+              }
+            };
+            listenersForOptions.set(capture, wrappedListener);
+          }
           return origAddEventListener(type, wrappedListener as EventListener, options);
         }
         return origAddEventListener(type, listener, options);
+      };
+
+      (es as any).removeEventListener = function (type: string, listener: EventListenerOrEventListenerObject | null, options?: boolean | EventListenerOptions) {
+        if (listener && type !== 'open' && type !== 'error' && type !== 'message') {
+          const listenersForType = wrappedListeners.get(type);
+          const listenersForOptions = listenersForType?.get(listener);
+          const wrappedListener = listenersForOptions?.get(getEventCapture(options));
+          if (wrappedListener) {
+            listenersForOptions?.delete(getEventCapture(options));
+            if (listenersForOptions?.size === 0) {
+              listenersForType?.delete(listener);
+            }
+            return origRemoveEventListener(type, wrappedListener, options);
+          }
+        }
+        return origRemoveEventListener(type, listener as unknown as EventListenerOrEventListenerObject, options);
       };
 
       // Capture all messages via original addEventListener to avoid double recording

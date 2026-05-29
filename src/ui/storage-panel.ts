@@ -183,7 +183,14 @@ export class StoragePanel {
       key: entry.key,
       value: entry.value,
     }, (data) => {
-      this.core.setItem(data.type as StorageType, data.key, data.value);
+      const nextType = data.type as StorageType;
+      if (nextType !== type || data.key !== key) {
+        if (this.core.setItem(nextType, data.key, data.value)) {
+          this.core.removeItem(type, key);
+        }
+      } else {
+        this.core.setItem(nextType, data.key, data.value);
+      }
       this.refreshTable();
     });
   }
