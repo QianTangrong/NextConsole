@@ -230,6 +230,7 @@ interface NextConsoleConfig {
     hookXHR?: boolean;         // default: true
     hookSSE?: boolean;         // default: true
     hookWebSocket?: boolean;   // default: true
+    previewFetchResponseBody?: boolean; // default: false
   };
   /** Storage options */
   storage?: {

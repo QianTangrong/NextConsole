@@ -14,10 +14,12 @@ const DEFAULT_OPTIONS: NetworkOptions = {
   hookXHR: true,
   hookSSE: true,
   hookWebSocket: true,
+  previewFetchResponseBody: false,
 };
 
 const MAX_MESSAGES = 1000;
 const MAX_BODY_PREVIEW_CHARS = 10000;
+const MAX_BODY_PREVIEW_BYTES = 10000;
 const STREAMING_CONTENT_TYPES = [
   'text/event-stream',
   'application/x-ndjson',
@@ -60,6 +62,14 @@ function collectFetchHeaders(input: RequestInfo | URL, init?: RequestInit): Reco
 
 function getEventCapture(options?: boolean | AddEventListenerOptions | EventListenerOptions): boolean {
   return typeof options === 'boolean' ? options : Boolean(options?.capture);
+}
+
+function getContentLength(response: Response): number | null {
+  const raw = response.headers.get('content-length');
+  if (!raw) return null;
+
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
 /** Serialize request body for display */
@@ -131,6 +141,7 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
   private originalXHRSetHeader: typeof XMLHttpRequest.prototype.setRequestHeader | null = null;
   private originalEventSource: typeof EventSource | null = null;
   private originalWebSocket: typeof WebSocket | null = null;
+  private scheduledStreamUpdates = new Map<number, { type: 'raf' | 'timeout'; handle: number }>();
   private hooked = false;
 
   constructor(options?: Partial<NetworkOptions>) {
@@ -185,9 +196,14 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
         entry.endTime = performance.now();
         entry.duration = entry.endTime - entry.startTime;
         entry.pending = false;
+        if (!self.options.previewFetchResponseBody) {
+          entry.responseBody = '[Fetch response body preview disabled]';
+        }
 
         self.emit('update', entry);
-        void self.captureFetchBody(response, entry, method);
+        if (self.options.previewFetchResponseBody) {
+          self.scheduleFetchBodyCapture(response, entry, method);
+        }
         return response;
       } catch (err) {
         entry.endTime = performance.now();
@@ -198,6 +214,12 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
         throw err;
       }
     };
+  }
+
+  private scheduleFetchBodyCapture(response: Response, entry: NetworkEntry, method: string): void {
+    window.setTimeout(() => {
+      void this.captureFetchBody(response, entry, method);
+    }, 0);
   }
 
   private async captureFetchBody(response: Response, entry: NetworkEntry, method: string): Promise<void> {
@@ -244,6 +266,10 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
       return null;
     }
 
+    if (response.bodyUsed || response.body.locked) {
+      return '[Response body consumed by page]';
+    }
+
     const contentType = response.headers.get('content-type')?.toLowerCase() || '';
     if (STREAMING_CONTENT_TYPES.some((type) => contentType.includes(type)) || contentType.includes('stream')) {
       return '[Streaming response body omitted]';
@@ -256,6 +282,17 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
       BINARY_CONTENT_TYPES.some((type) => contentType.includes(type))
     ) {
       return '[Binary response body omitted]';
+    }
+
+    const contentLength = getContentLength(response);
+    if (contentLength === null) {
+      return '[Response body preview skipped: unknown size]';
+    }
+    if (contentLength === 0) {
+      return null;
+    }
+    if (contentLength > MAX_BODY_PREVIEW_BYTES) {
+      return `[Response body omitted: ${contentLength} bytes]`;
     }
 
     return undefined;
@@ -295,6 +332,60 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
     }
 
     return { text, truncated };
+  }
+
+  private pushSSEEvent(entry: NetworkEntry, event: SSEEvent): void {
+    const events = entry.sseEvents;
+    if (!events) return;
+    if (events.length >= MAX_MESSAGES) {
+      events.splice(0, events.length - MAX_MESSAGES + 100);
+    }
+    events.push(event);
+  }
+
+  private pushStreamMessage(entry: NetworkEntry, message: StreamMessage): void {
+    const messages = entry.messages;
+    if (!messages) return;
+    if (messages.length >= MAX_MESSAGES) {
+      messages.splice(0, messages.length - MAX_MESSAGES + 100);
+    }
+    messages.push(message);
+    this.scheduleStreamUpdate(entry);
+  }
+
+  private scheduleStreamUpdate(entry: NetworkEntry): void {
+    if (this.scheduledStreamUpdates.has(entry.id)) return;
+
+    const flush = () => {
+      this.scheduledStreamUpdates.delete(entry.id);
+      this.emit('update', entry);
+    };
+
+    if (typeof window.requestAnimationFrame === 'function') {
+      const handle = window.requestAnimationFrame(flush);
+      this.scheduledStreamUpdates.set(entry.id, { type: 'raf', handle });
+      return;
+    }
+
+    const handle = window.setTimeout(flush, 16);
+    this.scheduledStreamUpdates.set(entry.id, { type: 'timeout', handle });
+  }
+
+  private cancelScheduledStreamUpdate(entry: NetworkEntry): void {
+    const scheduled = this.scheduledStreamUpdates.get(entry.id);
+    if (!scheduled) return;
+
+    if (scheduled.type === 'raf') {
+      window.cancelAnimationFrame(scheduled.handle);
+    } else {
+      window.clearTimeout(scheduled.handle);
+    }
+    this.scheduledStreamUpdates.delete(entry.id);
+  }
+
+  private emitUpdateNow(entry: NetworkEntry): void {
+    this.cancelScheduledStreamUpdate(entry);
+    this.emit('update', entry);
   }
 
   private hookXHR(): void {
@@ -457,7 +548,7 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
                 id: me.lastEventId || undefined,
                 event: type,
               };
-              entry.sseEvents!.push(sseEvent);
+              self.pushSSEEvent(entry, sseEvent);
               const msg: StreamMessage = {
                 direction: 'in',
                 data: me.data,
@@ -465,11 +556,7 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
                 event: type,
                 size: typeof me.data === 'string' ? me.data.length : 0,
               };
-              if (entry.messages!.length >= MAX_MESSAGES) {
-                entry.messages!.splice(0, entry.messages!.length - MAX_MESSAGES + 100);
-              }
-              entry.messages!.push(msg);
-              self.emit('update', entry);
+              self.pushStreamMessage(entry, msg);
 
               if (typeof listener === 'function') {
                 listener.call(es, e);
@@ -507,18 +594,14 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
           timestamp: Date.now(),
           id: e.lastEventId || undefined,
         };
-        entry.sseEvents!.push(sseEvent);
+        self.pushSSEEvent(entry, sseEvent);
         const msg: StreamMessage = {
           direction: 'in',
           data: e.data,
           timestamp: Date.now(),
           size: typeof e.data === 'string' ? e.data.length : 0,
         };
-        if (entry.messages!.length >= MAX_MESSAGES) {
-          entry.messages!.splice(0, entry.messages!.length - MAX_MESSAGES + 100);
-        }
-        entry.messages!.push(msg);
-        self.emit('update', entry);
+        self.pushStreamMessage(entry, msg);
       }) as EventListener);
 
       es.addEventListener('error', () => {
@@ -526,7 +609,7 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
         entry.endTime = performance.now();
         entry.duration = entry.endTime - entry.startTime;
         entry.error = 'SSE Connection Error';
-        self.emit('update', entry);
+        self.emitUpdateNow(entry);
       });
 
       return es;
@@ -584,11 +667,7 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
           timestamp: Date.now(),
           size: typeof e.data === 'string' ? e.data.length : (e.data as ArrayBuffer)?.byteLength || 0,
         };
-        if (entry.messages!.length >= MAX_MESSAGES) {
-          entry.messages!.splice(0, entry.messages!.length - MAX_MESSAGES + 100);
-        }
-        entry.messages!.push(msg);
-        self.emit('update', entry);
+        self.pushStreamMessage(entry, msg);
       });
 
       ws.addEventListener('close', (e: CloseEvent) => {
@@ -596,7 +675,7 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
         entry.endTime = performance.now();
         entry.duration = entry.endTime - entry.startTime;
         entry.statusText = `Closed (${e.code})`;
-        self.emit('update', entry);
+        self.emitUpdateNow(entry);
       });
 
       ws.addEventListener('error', () => {
@@ -604,7 +683,7 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
         entry.endTime = performance.now();
         entry.duration = entry.endTime - entry.startTime;
         entry.error = 'WebSocket Error';
-        self.emit('update', entry);
+        self.emitUpdateNow(entry);
       });
 
       // Hook send to capture outgoing messages
@@ -617,11 +696,7 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
           timestamp: Date.now(),
           size: typeof data === 'string' ? data.length : (data as ArrayBuffer)?.byteLength || 0,
         };
-        if (entry.messages!.length >= MAX_MESSAGES) {
-          entry.messages!.splice(0, entry.messages!.length - MAX_MESSAGES + 100);
-        }
-        entry.messages!.push(msg);
-        self.emit('update', entry);
+        self.pushStreamMessage(entry, msg);
         return origSend(data);
       };
 
@@ -658,6 +733,15 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
 
   destroy(): void {
     if (!this.hooked) return;
+
+    this.scheduledStreamUpdates.forEach((scheduled) => {
+      if (scheduled.type === 'raf') {
+        window.cancelAnimationFrame(scheduled.handle);
+      } else {
+        window.clearTimeout(scheduled.handle);
+      }
+    });
+    this.scheduledStreamUpdates.clear();
 
     if (this.originalFetch) {
       window.fetch = this.originalFetch;
