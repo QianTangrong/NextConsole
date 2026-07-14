@@ -169,6 +169,19 @@ export class MainPanel {
     closeBtn.addEventListener('click', () => this.hide());
     tabBar.appendChild(closeBtn);
 
+    // 关闭按钮固定在左侧，标签列表可横向滚动。
+    const tabsScroll = document.createElement('div');
+    tabsScroll.className = 'nc-tabs-scroll';
+
+    for (const tab of TABS) {
+      const tabEl = document.createElement('div');
+      tabEl.className = `nc-tab${tab.key === this.activeTab ? ' nc-tab-active' : ''}`;
+      tabEl.textContent = tab.label;
+      tabEl.dataset.ncTab = tab.key;
+      tabsScroll.appendChild(tabEl);
+    }
+
+    tabBar.appendChild(tabsScroll);
     this.panelEl.appendChild(tabBar);
 
     // Tab content area
