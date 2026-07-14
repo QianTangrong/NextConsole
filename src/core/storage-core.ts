@@ -103,12 +103,15 @@ export class StorageCore extends EventEmitter<StorageEvents> {
     expires?: string;
     secure?: boolean;
     sameSite?: string;
-  }): void {
+  }): boolean {
+    let ok = false;
     try {
       if (type === 'localStorage') {
         localStorage.setItem(key, value);
+        ok = true;
       } else if (type === 'sessionStorage') {
         sessionStorage.setItem(key, value);
+        ok = true;
       } else if (type === 'cookie') {
         let cookie = `${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
         if (cookieOptions?.domain) cookie += `; domain=${cookieOptions.domain}`;
@@ -118,11 +121,13 @@ export class StorageCore extends EventEmitter<StorageEvents> {
         if (cookieOptions?.secure) cookie += `; secure`;
         if (cookieOptions?.sameSite) cookie += `; SameSite=${cookieOptions.sameSite}`;
         document.cookie = cookie;
+        ok = this.readCookies().some((entry) => entry.key === key && entry.value === value);
       }
     } catch {
       // Storage may be unavailable
     }
     this.emit('update');
+    return ok;
   }
 
   /** Remove a storage item */

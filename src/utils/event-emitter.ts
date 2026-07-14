@@ -1,6 +1,19 @@
 /**
  * Simple typed event emitter.
  */
+let reportingListenerError = false;
+
+function reportListenerError(error: unknown): void {
+  if (reportingListenerError) return;
+
+  reportingListenerError = true;
+  try {
+    console.error('[NextConsole] event listener error', error);
+  } finally {
+    reportingListenerError = false;
+  }
+}
+
 export class EventEmitter<Events extends Record<string, (...args: any[]) => void>> {
   private listeners = new Map<keyof Events, Set<Function>>();
 
@@ -21,7 +34,7 @@ export class EventEmitter<Events extends Record<string, (...args: any[]) => void
       try {
         fn(...args);
       } catch (e) {
-        // Silently catch listener errors to prevent breaking the emitter
+        reportListenerError(e);
       }
     });
   }

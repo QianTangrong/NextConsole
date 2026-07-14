@@ -57,4 +57,6 @@ export interface NetworkOptions {
   hookSSE: boolean;
   /** Whether to hook WebSocket */
   hookWebSocket: boolean;
+  /** Whether to preview fetch response bodies. Disabled by default to avoid interfering with streams. */
+  previewFetchResponseBody?: boolean;
 }
