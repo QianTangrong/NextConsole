@@ -209,6 +209,7 @@ export class NetworkPanel {
     html += `Type: ${entry.type}\n`;
     html += `Duration: ${entry.pending ? 'pending...' : formatDuration(entry.duration)}\n`;
     if (entry.messages) html += `Messages: ${entry.messages.length}\n`;
+    if (entry.streaming) html += `Response stream: live\n`;
     if (entry.error) html += `Error: ${escapeHTML(entry.error)}\n`;
     html += `</div></div>`;
 
@@ -254,7 +255,7 @@ export class NetworkPanel {
     // Response Body
     if (entry.responseBody) {
       html += `<div class="nc-detail-section">`;
-      html += `<div class="nc-detail-title">Response Body</div>`;
+      html += `<div class="nc-detail-title">Response Body${entry.streaming ? ' · <span style="color:#3dc9b0">● Live</span>' : ''}</div>`;
       html += `<div class="nc-detail-body">${highlightJSON(entry.responseBody)}</div>`;
       html += `</div>`;
     }

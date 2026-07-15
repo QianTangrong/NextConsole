@@ -15,6 +15,7 @@ const DEFAULT_OPTIONS: NetworkOptions = {
   hookSSE: true,
   hookWebSocket: true,
   previewFetchResponseBody: false,
+  maxFetchStreamResponseChars: 1_000_000,
 };
 
 const MAX_MESSAGES = 1000;
@@ -70,6 +71,10 @@ function getContentLength(response: Response): number | null {
 
   const value = Number(raw);
   return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function isStreamingContentType(contentType: string): boolean {
+  return STREAMING_CONTENT_TYPES.some((type) => contentType.includes(type)) || contentType.includes('stream');
 }
 
 /** Serialize request body for display */
@@ -202,7 +207,7 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
 
         self.emit('update', entry);
         if (self.options.previewFetchResponseBody) {
-          self.scheduleFetchBodyCapture(response, entry, method);
+          self.startFetchBodyCapture(response, entry, method);
         }
         return response;
       } catch (err) {
@@ -216,10 +221,18 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
     };
   }
 
-  private scheduleFetchBodyCapture(response: Response, entry: NetworkEntry, method: string): void {
-    window.setTimeout(() => {
-      void this.captureFetchBody(response, entry, method);
-    }, 0);
+  private startFetchBodyCapture(response: Response, entry: NetworkEntry, method: string): void {
+    let clone: Response;
+    try {
+      // 在业务代码消费原始 Response 前立即创建副本，避免流已被锁定。
+      clone = response.clone();
+    } catch {
+      entry.responseBody = '[Unable to read body]';
+      this.emit('update', entry);
+      return;
+    }
+
+    void this.captureFetchBody(clone, entry, method);
   }
 
   private async captureFetchBody(response: Response, entry: NetworkEntry, method: string): Promise<void> {
@@ -231,18 +244,14 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
       return;
     }
 
-    let clone: Response;
-    try {
-      clone = response.clone();
-    } catch {
-      entry.responseBody = '[Unable to read body]';
-      this.emit('update', entry);
-      return;
-    }
-
     try {
       const contentType = response.headers.get('content-type')?.toLowerCase() || '';
-      const preview = await this.readTextPreview(clone, MAX_BODY_PREVIEW_CHARS);
+      if (isStreamingContentType(contentType)) {
+        await this.captureFetchStream(response, entry);
+        return;
+      }
+
+      const preview = await this.readTextPreview(response, MAX_BODY_PREVIEW_CHARS);
       const bodyText = preview.truncated ? `${preview.text}...(truncated)` : preview.text;
 
       if (!preview.truncated && contentType.includes('json')) {
@@ -271,8 +280,8 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
     }
 
     const contentType = response.headers.get('content-type')?.toLowerCase() || '';
-    if (STREAMING_CONTENT_TYPES.some((type) => contentType.includes(type)) || contentType.includes('stream')) {
-      return '[Streaming response body omitted]';
+    if (isStreamingContentType(contentType)) {
+      return undefined;
     }
     if (
       contentType.startsWith('image/') ||
@@ -332,6 +341,55 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
     }
 
     return { text, truncated };
+  }
+
+  private async captureFetchStream(response: Response, entry: NetworkEntry): Promise<void> {
+    if (!response.body) return;
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    const configuredLimit = this.options.maxFetchStreamResponseChars ?? 1_000_000;
+    const maxChars = Number.isFinite(configuredLimit) ? Math.max(0, Math.floor(configuredLimit)) : 1_000_000;
+    let text = '';
+    let truncated = false;
+
+    entry.streaming = true;
+    entry.responseBody = '';
+    this.emit('update', entry);
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        text += decoder.decode(value, { stream: true });
+        if (maxChars > 0 && text.length > maxChars) {
+          text = text.slice(0, maxChars);
+          truncated = true;
+          void reader.cancel();
+          break;
+        }
+
+        entry.responseBody = text;
+        this.scheduleStreamUpdate(entry);
+      }
+
+      if (!truncated) {
+        text += decoder.decode();
+      }
+      entry.responseBody = truncated ? `${text}...(truncated)` : text;
+    } catch {
+      entry.responseBody = text || '[Unable to read body]';
+    } finally {
+      entry.streaming = false;
+      try {
+        reader.releaseLock();
+      } catch {
+        // Reader may already be released after cancelation in some browsers.
+      }
+    }
+
+    this.emit('update', entry);
   }
 
   private pushSSEEvent(entry: NetworkEntry, event: SSEEvent): void {

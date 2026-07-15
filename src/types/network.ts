@@ -23,6 +23,8 @@ export interface NetworkEntry {
   sseEvents?: SSEEvent[];
   /** For SSE/WebSocket: real-time messages */
   messages?: StreamMessage[];
+  /** 是否仍在抓取 fetch 响应流。 */
+  streaming?: boolean;
   /** Whether the request is still pending */
   pending: boolean;
   error?: string;
@@ -59,4 +61,6 @@ export interface NetworkOptions {
   hookWebSocket: boolean;
   /** Whether to preview fetch response bodies. Disabled by default to avoid interfering with streams. */
   previewFetchResponseBody?: boolean;
+  /** 流式 fetch 响应保留的最大字符数；设为 0 时不限制，默认 1,000,000。 */
+  maxFetchStreamResponseChars?: number;
 }
