@@ -1,4 +1,5 @@
 import type { ConsoleOptions } from './console';
+import type { MimoAIDiagnosisOptions } from './mimo-diagnosis';
 import type { NetworkOptions } from './network';
 import type { StorageOptions } from './storage';
 
@@ -23,6 +24,8 @@ export interface NextConsoleConfig {
   network?: Partial<NetworkOptions>;
   /** Storage panel options */
   storage?: Partial<StorageOptions>;
+  /** 小米 AI 错误诊断。默认关闭，开启后仅在用户手动点击分析时发送脱敏快照。 */
+  mimoDiagnosis?: MimoAIDiagnosisOptions;
   /** Callback when NextConsole is ready */
   onReady?: () => void;
 }
@@ -36,8 +39,15 @@ export interface NextConsoleEvents {
   destroy: () => void;
 }
 
-export type { LogLevel, LogEntry, ConsoleOptions } from './console';
+export type { LogLevel, LogSource, LogEntry, ConsoleOptions } from './console';
 export type { HttpMethod, RequestType, NetworkEntry, SSEEvent, StreamMessage, NetworkOptions } from './network';
 export type { StorageType, StorageEntry, StorageOptions } from './storage';
 export type { SystemInfo, PerformanceMetrics } from './system';
 export type { NextConsolePlugin, PluginAPI, PluginTab } from './plugin';
+export type {
+  MimoAIDiagnosisOptions,
+  MimoDiagnosisContext,
+  MimoDiagnosisContextProviderInput,
+  MimoDiagnosisErrorContext,
+  MimoDiagnosisRuntimeContext,
+} from './mimo-diagnosis';

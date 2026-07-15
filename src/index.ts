@@ -4,6 +4,7 @@ import { MainPanel } from './ui/main-panel';
 export type { NextConsoleConfig, PanelTab, LogLevel, LogEntry, NetworkEntry, NextConsolePlugin };
 export type {
   ConsoleOptions,
+  LogSource,
   NetworkOptions,
   StorageOptions,
   StorageType,
@@ -15,10 +16,16 @@ export type {
   PerformanceMetrics,
   PluginAPI,
   PluginTab,
+  MimoAIDiagnosisOptions,
+  MimoDiagnosisContext,
+  MimoDiagnosisContextProviderInput,
+  MimoDiagnosisErrorContext,
+  MimoDiagnosisRuntimeContext,
 } from './types';
 
 export { createSourcePlugin } from './plugins/source-plugin';
 export { createPerformancePlugin } from './plugins/performance-plugin';
+export { createMimoAIDiagnosisPlugin } from './plugins/mimo-ai-diagnosis-plugin';
 
 /** Track singleton instance to prevent multiple hook conflicts */
 let _instance: NextConsole | null = null;

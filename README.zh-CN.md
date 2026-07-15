@@ -8,7 +8,7 @@
 
 ## 特性
 
-- **Console 面板** — 拦截 `console.log/info/warn/error/debug`，支持颜色标记、堆栈追踪、万级日志虚拟列表渲染、搜索过滤、导出
+- **Console 面板** — 拦截 `console.log/info/warn/error/debug`，并捕获未处理的运行时异常与 Promise 拒绝；支持颜色标记、堆栈追踪、万级日志虚拟列表渲染、搜索过滤、导出
 - **AI 流式日志** — 原生支持 SSE 和流式 JSON 输出，通过 `requestAnimationFrame` 批量渲染，高频更新不卡顿
 - **Network 面板** — 拦截 `fetch`、`XMLHttpRequest`、`EventSource`（SSE）、`WebSocket`，支持可排序表格、请求/响应详情、耗时统计，SSE/WebSocket 实时消息流（类似浏览器 DevTools 的 Messages 标签页）
 - **Storage 面板** — 查看/编辑/删除 `localStorage`、`sessionStorage` 和 Cookie，支持搜索和行内编辑
@@ -125,6 +125,27 @@ nc.endStream('chat-1');
 
 即使面对数千次高频更新，也能通过 `requestAnimationFrame` 批量渲染避免 UI 卡顿。
 
+## 小米 AI 错误诊断（开发调试）
+
+默认关闭。启用后会新增“AI 诊断”标签页，开发者在该页临时输入小米 API Key，再对某一条 `console.error`、未处理的运行时异常或未处理 Promise 拒绝手动发起诊断。Key 只保留在输入框内，不会写入配置、Storage 或日志；刷新页面或销毁实例后失效。
+
+```ts
+const nc = new NextConsole({
+  mimoDiagnosis: {
+    enabled: true,
+    contextProvider: () => ({
+      feature: 'order-submit',
+      release: '2026.07.15',
+      // 只提供排障所需且已脱敏的业务字段
+    }),
+  },
+});
+```
+
+该功能固定调用 `https://token-plan-cn.xiaomimimo.com/v1/chat/completions` 与 `mimo-v2.5-pro`，使用请求头 `api-key`。发送给模型的是经脱敏和限长处理的错误栈、近期控制台记录、关联网络状态、页面运行环境及 `contextProvider` 返回值；不会发送请求头、请求/响应 body、Cookie、浏览器存储或 URL 查询参数。诊断请求本身也不会出现在 Network 面板。
+
+这是浏览器直连模式，Key 会暴露给当前页面运行环境，因此仅适用于开发调试。服务端不允许跨域时，浏览器无法直接调用。
+
 ## 插件系统
 
 通过插件扩展 NextConsole 的功能：
@@ -228,6 +249,7 @@ interface NextConsoleConfig {
   console?: {
     maxLogs?: number;      // 默认：10000
     hookConsole?: boolean; // 默认：true
+    captureGlobalErrors?: boolean; // 默认：true，捕获 window.error 和 unhandledrejection
   };
   /** Network 面板配置 */
   network?: {

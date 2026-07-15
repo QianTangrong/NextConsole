@@ -11,6 +11,7 @@ import { StoragePanel } from './storage-panel';
 import { ElementPanel } from './element-panel';
 import { SystemPanel } from './system-panel';
 import { ReplPanel } from './repl-panel';
+import { createMimoAIDiagnosisPlugin } from '../plugins/mimo-ai-diagnosis-plugin';
 import { THEME_CSS } from '../styles/theme';
 import { on, clamp } from '../utils/dom';
 
@@ -79,6 +80,11 @@ export class MainPanel {
     this.storageCore = new StorageCore(config.storage);
     this.elementCore = new ElementCore();
     this.replCore = new ReplCore();
+
+    // 默认不加载，避免未启用时出现额外 Tab、监听或诊断数据收集。
+    if (config.mimoDiagnosis?.enabled) {
+      this.plugins.push(createMimoAIDiagnosisPlugin(config.mimoDiagnosis));
+    }
   }
 
   /** Initialize everything */
