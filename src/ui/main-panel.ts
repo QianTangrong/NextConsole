@@ -13,6 +13,7 @@ import { SystemPanel } from './system-panel';
 import { ReplPanel } from './repl-panel';
 import { createMimoAIDiagnosisPlugin } from '../plugins/mimo-ai-diagnosis-plugin';
 import { THEME_CSS } from '../styles/theme';
+import { createAIExport } from '../utils/ai-export';
 import { on, clamp } from '../utils/dom';
 
 const TABS: { key: PanelTab; label: string }[] = [
@@ -240,7 +241,7 @@ export class MainPanel {
     switch (tab) {
       case 'console':
         if (!this.consolePanel) {
-          this.consolePanel = new ConsolePanel(pane, this.consoleCore);
+          this.consolePanel = new ConsolePanel(pane, this.consoleCore, () => this.copyForAI());
         } else {
           this.consolePanel.refresh();
         }
@@ -378,6 +379,35 @@ export class MainPanel {
   /** Get the storage core for API access */
   getStorageCore(): StorageCore {
     return this.storageCore;
+  }
+
+  /** 将当前错误上下文导出为脱敏后的 AI 排障 Markdown。 */
+  exportForAI(): string {
+    return createAIExport(this.consoleCore.getEntries(), this.networkCore.getEntries());
+  }
+
+  /** 复制 AI 导出内容；不支持 Clipboard API 时回退到浏览器兼容方案。 */
+  async copyForAI(): Promise<boolean> {
+    const text = this.exportForAI();
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        return document.execCommand('copy');
+      } catch {
+        return false;
+      } finally {
+        textarea.remove();
+      }
+    }
   }
 
   /** Set theme */

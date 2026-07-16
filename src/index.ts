@@ -115,6 +115,16 @@ export class NextConsole {
     return this.panel.getConsoleCore().exportJSON();
   }
 
+  /** 导出当前报错、关联网络活动和脱敏 DOM 快照组成的 Markdown。 */
+  exportForAI(): string {
+    return this.panel.exportForAI();
+  }
+
+  /** 将当前 AI 排障 Markdown 复制到剪贴板。 */
+  copyForAI(): Promise<boolean> {
+    return this.panel.copyForAI();
+  }
+
   /** Get all captured console log entries */
   getLogEntries(): LogEntry[] {
     return this.panel.getConsoleCore().getEntries();

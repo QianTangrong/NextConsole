@@ -284,6 +284,8 @@ interface NextConsoleConfig {
 | `nc.clearConsole()` | 清空所有控制台日志 |
 | `nc.clearNetwork()` | 清空所有网络记录 |
 | `nc.exportLogs()` | 导出日志为 JSON 字符串 |
+| `nc.exportForAI()` | 导出包含报错、关联网络请求和脱敏 DOM 快照的 Markdown |
+| `nc.copyForAI()` | 一键复制 AI 排障 Markdown 到剪贴板 |
 | `nc.getLogEntries()` | 获取所有日志条目 |
 | `nc.getNetworkEntries()` | 获取所有网络请求条目 |
 | `nc.use(plugin)` | 注册插件（支持链式调用） |

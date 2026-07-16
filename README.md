@@ -257,6 +257,8 @@ interface NextConsoleConfig {
 | `nc.clearConsole()` | Clear all console logs |
 | `nc.clearNetwork()` | Clear all network entries |
 | `nc.exportLogs()` | Export logs as JSON string |
+| `nc.exportForAI()` | Export errors, correlated network activity, and a redacted DOM snapshot as Markdown |
+| `nc.copyForAI()` | Copy the AI-ready Markdown export to the clipboard |
 | `nc.getLogEntries()` | Get all log entries |
 | `nc.getNetworkEntries()` | Get all network entries |
 | `nc.use(plugin)` | Register a plugin (chainable) |
