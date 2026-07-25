@@ -20,6 +20,7 @@ export class NetworkPanel {
   private sortDir: SortDir = 'desc';
   private searchText = '';
   private renderRAF: number | null = null;
+  private needsRefresh = false;
   private cleanups: (() => void)[] = [];
 
   constructor(container: HTMLElement, core: NetworkCore) {
@@ -105,18 +106,37 @@ export class NetworkPanel {
     const unsub1 = this.core.on('request', () => this.scheduleRefresh());
     const unsub2 = this.core.on('update', () => {
       this.scheduleRefresh();
-      if (this.selectedId) this.showDetail();
+      if (this.selectedId && this.isRenderable()) this.showDetail();
     });
     const unsub3 = this.core.on('clear', () => this.scheduleRefresh());
     this.cleanups.push(unsub1, unsub2, unsub3);
   }
 
   private scheduleRefresh(): void {
+    if (!this.isRenderable()) {
+      this.needsRefresh = true;
+      return;
+    }
     if (this.renderRAF !== null) return;
     this.renderRAF = requestAnimationFrame(() => {
       this.renderRAF = null;
       this.refreshTable();
     });
+  }
+
+  refresh(): void {
+    if (this.renderRAF !== null) {
+      cancelAnimationFrame(this.renderRAF);
+      this.renderRAF = null;
+    }
+    this.needsRefresh = false;
+    this.refreshTable();
+    if (this.selectedId) this.showDetail();
+  }
+
+  private isRenderable(): boolean {
+    return this.container.classList.contains('nc-tab-pane-active')
+      && this.container.closest('.nc-panel-visible') !== null;
   }
 
   private refreshTable(): void {

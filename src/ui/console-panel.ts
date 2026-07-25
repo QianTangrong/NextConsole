@@ -19,6 +19,7 @@ export class ConsolePanel {
   private searchText = '';
   private scrollLocked = true;
   private renderRAF: number | null = null;
+  private needsRefresh = false;
   private cleanups: (() => void)[] = [];
 
   constructor(container: HTMLElement, core: ConsoleCore) {
@@ -31,16 +32,20 @@ export class ConsolePanel {
   private render(): void {
     // Toolbar
     this.toolbarEl = document.createElement('div');
-    this.toolbarEl.className = 'nc-toolbar';
+    this.toolbarEl.className = 'nc-toolbar nc-console-toolbar';
     this.toolbarEl.innerHTML = `
-      <button class="nc-toolbar-btn" data-nc-filter="log">Log</button>
-      <button class="nc-toolbar-btn" data-nc-filter="info">Info</button>
-      <button class="nc-toolbar-btn" data-nc-filter="warn">Warn</button>
-      <button class="nc-toolbar-btn" data-nc-filter="error">Error</button>
-      <button class="nc-toolbar-btn" data-nc-filter="debug">Debug</button>
+      <div class="nc-toolbar-group nc-console-filter-group">
+        <button class="nc-toolbar-btn" data-nc-filter="log">Log</button>
+        <button class="nc-toolbar-btn" data-nc-filter="info">Info</button>
+        <button class="nc-toolbar-btn" data-nc-filter="warn">Warn</button>
+        <button class="nc-toolbar-btn" data-nc-filter="error">Error</button>
+        <button class="nc-toolbar-btn" data-nc-filter="debug">Debug</button>
+      </div>
       <input type="text" placeholder="Filter logs..." class="nc-console-search" />
-      <button class="nc-toolbar-btn nc-console-clear">Clear</button>
-      <button class="nc-toolbar-btn nc-console-export">Export</button>
+      <div class="nc-toolbar-group nc-console-action-group">
+        <button class="nc-toolbar-btn nc-console-clear">Clear</button>
+        <button class="nc-toolbar-btn nc-console-export">Export</button>
+      </div>
     `;
     this.container.appendChild(this.toolbarEl);
 
@@ -118,6 +123,10 @@ export class ConsolePanel {
   }
 
   private scheduleRefresh(): void {
+    if (!this.isRenderable()) {
+      this.needsRefresh = true;
+      return;
+    }
     if (this.renderRAF !== null) return;
     this.renderRAF = requestAnimationFrame(() => {
       this.renderRAF = null;
@@ -125,7 +134,22 @@ export class ConsolePanel {
     });
   }
 
+  refresh(): void {
+    if (this.renderRAF !== null) {
+      cancelAnimationFrame(this.renderRAF);
+      this.renderRAF = null;
+    }
+    this.needsRefresh = false;
+    this.refreshEntries();
+  }
+
+  private isRenderable(): boolean {
+    return this.container.classList.contains('nc-tab-pane-active')
+      && this.container.closest('.nc-panel-visible') !== null;
+  }
+
   private refreshEntries(): void {
+    if (!this.isRenderable() && this.needsRefresh) return;
     const levels = this.activeFilters.size > 0 ? Array.from(this.activeFilters) : undefined;
     this.filteredEntries = this.core.getFilteredEntries(levels, this.searchText || undefined);
     this.renderList();
