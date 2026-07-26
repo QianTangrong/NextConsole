@@ -29,10 +29,13 @@ const TABS: { key: PanelTab; label: string }[] = [
 export class MainPanel {
   private host: HTMLElement;
   private shadow: ShadowRoot;
+  private backdropEl!: HTMLElement;
   private panelEl!: HTMLElement;
   private tabContentEl!: HTMLElement;
   private activeTab: string;
   private visible = false;
+  private mounted = false;
+  private destroyed = false;
   private cleanups: (() => void)[] = [];
 
   // Core modules
@@ -81,6 +84,8 @@ export class MainPanel {
   /** Initialize everything */
   init(): void {
     const mount = () => {
+      if (this.destroyed || this.mounted) return;
+
       const target = this.config.target || document.body;
       target.appendChild(this.host);
 
@@ -88,6 +93,9 @@ export class MainPanel {
       const style = document.createElement('style');
       style.textContent = THEME_CSS;
       this.shadow.appendChild(style);
+
+      // Apply theme
+      this.applyTheme(this.config.theme || 'dark');
 
       // Create float button
       this.floatButton = new FloatButton(
@@ -112,12 +120,14 @@ export class MainPanel {
       }
 
       this.initialized = true;
+      this.mounted = true;
 
       // Initialize pending plugins
       for (const plugin of this.plugins) {
         this.initPlugin(plugin);
       }
 
+      this.applyVisibility();
       this.config.onReady?.();
     };
 
@@ -126,10 +136,16 @@ export class MainPanel {
       mount();
     } else {
       document.addEventListener('DOMContentLoaded', mount, { once: true });
+      this.cleanups.push(() => document.removeEventListener('DOMContentLoaded', mount));
     }
   }
 
   private createPanel(): void {
+    this.backdropEl = document.createElement('div');
+    this.backdropEl.className = 'nc-backdrop';
+    this.backdropEl.addEventListener('click', () => this.hide());
+    this.shadow.appendChild(this.backdropEl);
+
     this.panelEl = document.createElement('div');
     this.panelEl.className = 'nc-panel';
 
@@ -143,26 +159,15 @@ export class MainPanel {
     const tabBar = document.createElement('div');
     tabBar.className = 'nc-tab-bar';
 
-    // Close button (fixed on the right, outside the scrollable area)
+    // Close button stays fixed on the left, outside the scrollable tabs.
     const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
     closeBtn.className = 'nc-close-btn';
     closeBtn.textContent = '✕';
+    closeBtn.title = 'Close';
+    closeBtn.setAttribute('aria-label', 'Close NextConsole');
     closeBtn.addEventListener('click', () => this.hide());
     tabBar.appendChild(closeBtn);
-
-    // Scrollable tabs wrapper
-    const tabsScroll = document.createElement('div');
-    tabsScroll.className = 'nc-tabs-scroll';
-
-    for (const tab of TABS) {
-      const tabEl = document.createElement('div');
-      tabEl.className = `nc-tab${tab.key === this.activeTab ? ' nc-tab-active' : ''}`;
-      tabEl.textContent = tab.label;
-      tabEl.dataset.ncTab = tab.key;
-      tabsScroll.appendChild(tabEl);
-    }
-
-    tabBar.appendChild(tabsScroll);
 
     this.panelEl.appendChild(tabBar);
 
@@ -217,11 +222,15 @@ export class MainPanel {
       case 'console':
         if (!this.consolePanel) {
           this.consolePanel = new ConsolePanel(pane, this.consoleCore);
+        } else {
+          this.consolePanel.refresh();
         }
         break;
       case 'network':
         if (!this.networkPanel) {
           this.networkPanel = new NetworkPanel(pane, this.networkCore);
+        } else {
+          this.networkPanel.refresh();
         }
         break;
       case 'storage':
@@ -300,16 +309,27 @@ export class MainPanel {
   show(): void {
     if (this.visible) return;
     this.visible = true;
-    this.panelEl.classList.add('nc-panel-visible');
-    this.floatButton.hide();
+    this.applyVisibility();
   }
 
   /** Hide the panel */
   hide(): void {
     if (!this.visible) return;
     this.visible = false;
-    this.panelEl.classList.remove('nc-panel-visible');
-    this.floatButton.show();
+    this.applyVisibility();
+  }
+
+  private applyVisibility(): void {
+    if (!this.mounted) return;
+
+    this.backdropEl.classList.toggle('nc-backdrop-visible', this.visible);
+    this.panelEl.classList.toggle('nc-panel-visible', this.visible);
+    if (this.visible) {
+      this.floatButton.hide();
+      this.activatePanel(this.activeTab);
+    } else {
+      this.floatButton.show();
+    }
   }
 
   /** Toggle panel visibility */
@@ -339,6 +359,19 @@ export class MainPanel {
   /** Get the storage core for API access */
   getStorageCore(): StorageCore {
     return this.storageCore;
+  }
+
+  /** Set theme */
+  setTheme(theme: 'dark' | 'light'): void {
+    this.applyTheme(theme);
+  }
+
+  private applyTheme(theme: 'dark' | 'light'): void {
+    if (theme === 'light') {
+      this.host.classList.add('nc-theme-light');
+    } else {
+      this.host.classList.remove('nc-theme-light');
+    }
   }
 
   /** Register a plugin */
@@ -403,30 +436,49 @@ export class MainPanel {
     plugin.init?.(api);
   }
 
+  private destroyPlugin(plugin: NextConsolePlugin): void {
+    const tabKey = `plugin-${plugin.name}`;
+    if (plugin.tab && this.pluginPanelsRendered.has(tabKey)) {
+      try {
+        plugin.tab.destroy?.();
+      } catch (err) {
+        console.error('[NextConsole Plugin] tab destroy failed', plugin.name, err);
+      }
+    }
+
+    try {
+      plugin.destroy?.();
+    } catch (err) {
+      console.error('[NextConsole Plugin] destroy failed', plugin.name, err);
+    }
+  }
+
   /** Completely destroy and clean up */
   destroy(): void {
+    if (this.destroyed) return;
+    this.destroyed = true;
+
     this.consolePanel?.destroy();
     this.networkPanel?.destroy();
     this.storagePanel?.destroy();
     this.elementPanel?.destroy();
     this.systemPanel?.destroy();
     this.replPanel?.destroy();
-    this.floatButton.destroy();
+    this.floatButton?.destroy();
+    for (const plugin of this.plugins) {
+      this.destroyPlugin(plugin);
+    }
     this.consoleCore.destroy();
     this.networkCore.destroy();
     this.storageCore.destroy();
     this.elementCore.destroy();
     this.replCore.destroy();
-    // Destroy plugins
-    for (const plugin of this.plugins) {
-      plugin.tab?.destroy?.();
-      plugin.destroy?.();
-    }
     this.plugins.length = 0;
     this.pluginTabs.length = 0;
     this.pluginPanelsRendered.clear();
     this.cleanups.forEach((fn) => fn());
     this.cleanups.length = 0;
     this.host.remove();
+    this.mounted = false;
   }
 }
