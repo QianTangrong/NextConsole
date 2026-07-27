@@ -8,6 +8,8 @@ type NetworkEvents = {
   clear: () => void;
 };
 
+type FetchIgnoreRule = (url: string, method: string) => boolean;
+
 const DEFAULT_OPTIONS: NetworkOptions = {
   maxRequests: 500,
   hookFetch: true,
@@ -147,6 +149,7 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
   private originalEventSource: typeof EventSource | null = null;
   private originalWebSocket: typeof WebSocket | null = null;
   private scheduledStreamUpdates = new Map<number, { type: 'raf' | 'timeout'; handle: number }>();
+  private fetchIgnoreRules = new Set<FetchIgnoreRule>();
   private hooked = false;
 
   constructor(options?: Partial<NetworkOptions>) {
@@ -171,6 +174,11 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
     window.fetch = async function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
       const url = getFetchURL(input);
       const method = getFetchMethod(input, init);
+
+      // 先判断再读取 header/body，避免调试工具自身的凭据和诊断内容被记录下来。
+      if (self.shouldIgnoreFetch(url, method)) {
+        return origFetch(input, init);
+      }
       const requestHeaders = collectFetchHeaders(input, init);
 
       const entry: NetworkEntry = {
@@ -219,6 +227,26 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
         throw err;
       }
     };
+  }
+
+  /**
+   * 为可信插件注册精确的 fetch 排除规则。
+   * 规则只影响 Network 面板展示，不会修改或阻断真实网络请求。
+   */
+  addFetchIgnoreRule(rule: FetchIgnoreRule): () => void {
+    this.fetchIgnoreRules.add(rule);
+    return () => this.fetchIgnoreRules.delete(rule);
+  }
+
+  private shouldIgnoreFetch(url: string, method: string): boolean {
+    for (const rule of this.fetchIgnoreRules) {
+      try {
+        if (rule(url, method)) return true;
+      } catch {
+        // 不让一个插件的匹配异常影响业务 fetch。
+      }
+    }
+    return false;
   }
 
   private startFetchBodyCapture(response: Response, entry: NetworkEntry, method: string): void {
@@ -800,6 +828,7 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
       }
     });
     this.scheduledStreamUpdates.clear();
+    this.fetchIgnoreRules.clear();
 
     if (this.originalFetch) {
       window.fetch = this.originalFetch;
