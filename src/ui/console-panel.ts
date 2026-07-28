@@ -22,7 +22,11 @@ export class ConsolePanel {
   private needsRefresh = false;
   private cleanups: (() => void)[] = [];
 
-  constructor(container: HTMLElement, core: ConsoleCore) {
+  constructor(
+    container: HTMLElement,
+    core: ConsoleCore,
+    private copyForAI: () => Promise<boolean>,
+  ) {
     this.container = container;
     this.core = core;
     this.render();
@@ -45,6 +49,7 @@ export class ConsolePanel {
       <div class="nc-toolbar-group nc-console-action-group">
         <button class="nc-toolbar-btn nc-console-clear">Clear</button>
         <button class="nc-toolbar-btn nc-console-export">Export</button>
+        <button class="nc-toolbar-btn nc-console-copy-ai" title="Copy structured, redacted diagnostic context as Markdown">Copy for AI</button>
       </div>
     `;
     this.container.appendChild(this.toolbarEl);
@@ -100,6 +105,10 @@ export class ConsolePanel {
       a.download = `nextconsole-logs-${Date.now()}.json`;
       a.click();
       URL.revokeObjectURL(url);
+    });
+
+    this.toolbarEl.querySelector('.nc-console-copy-ai')!.addEventListener('click', (event) => {
+      void this.handleCopyForAI(event.currentTarget as HTMLButtonElement);
     });
 
     // Scroll: detect if user scrolled away from bottom
@@ -193,6 +202,17 @@ export class ConsolePanel {
         return escapeHTML(String(arg));
       })
       .join(' ');
+  }
+
+  private async handleCopyForAI(button: HTMLButtonElement): Promise<void> {
+    const originalLabel = button.textContent || 'Copy for AI';
+    button.disabled = true;
+    const copied = await this.copyForAI();
+    button.textContent = copied ? 'Copied' : 'Copy failed';
+    window.setTimeout(() => {
+      button.disabled = false;
+      button.textContent = originalLabel;
+    }, 1_500);
   }
 
   destroy(): void {
