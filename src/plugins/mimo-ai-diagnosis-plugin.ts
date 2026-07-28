@@ -649,6 +649,9 @@ export function createMimoAIDiagnosisPlugin(options: MimoAIDiagnosisOptions = {}
               },
             ],
             max_completion_tokens: MAX_COMPLETION_TOKENS,
+            // 诊断结果必须稳定落在 content 中，避免思考过程耗尽输出额度。
+            stream: false,
+            thinking: { type: 'disabled' },
           }),
           credentials: 'omit',
           referrerPolicy: 'strict-origin',
