@@ -1,4 +1,4 @@
-/** CSS theme variables and base styles injected into shadow DOM */
+/** 注入 Shadow DOM 的主题变量与基础样式，所有界面样式均以 nc 前缀隔离。 */
 export const THEME_CSS = `
 :host {
   --nc-bg: #1e1e1e;
@@ -31,7 +31,7 @@ export const THEME_CSS = `
   line-height: 1.5;
 }
 
-/* Light Theme */
+/* 浅色主题：仅覆盖颜色令牌，布局与交互规则与深色主题共用。 */
 :host(.nc-theme-light) {
   --nc-bg: #ffffff;
   --nc-bg-secondary: #f5f5f5;
@@ -59,7 +59,7 @@ export const THEME_CSS = `
   box-sizing: border-box;
 }
 
-/* Float Button */
+/* 悬浮入口：固定在视口层，避免受到宿主页面布局影响。 */
 .nc-float-btn {
   position: fixed;
   z-index: 2147483647;
@@ -86,7 +86,7 @@ export const THEME_CSS = `
   background: var(--nc-accent-hover);
 }
 
-/* Panel Container */
+/* 调试面板容器：背景遮罩与主面板分层管理显示状态。 */
 .nc-backdrop {
   position: fixed;
   top: 0;
@@ -118,7 +118,7 @@ export const THEME_CSS = `
   transform: translateY(0);
 }
 
-/* Resize Handle */
+/* 尺寸拖拽把手：扩大实际可点击区域，保留细窄的视觉分隔线。 */
 .nc-resize-handle {
   height: 6px;
   cursor: ns-resize;
@@ -136,7 +136,7 @@ export const THEME_CSS = `
   border-radius: 2px;
 }
 
-/* Tab Bar */
+/* 标签栏：允许内置与插件标签在窄屏下横向滚动。 */
 .nc-tab-bar {
   display: flex;
   flex-direction: row;
@@ -206,7 +206,7 @@ export const THEME_CSS = `
   border-bottom-color: var(--nc-accent);
 }
 
-/* Tab Content */
+/* 标签内容区：非激活面板不参与布局和交互。 */
 .nc-tab-content {
   flex: 1;
   overflow: hidden;
@@ -224,7 +224,7 @@ export const THEME_CSS = `
   display: flex;
 }
 
-/* Toolbar */
+/* 工具栏：承载筛选、搜索、清空和导出等跨列表操作。 */
 .nc-toolbar {
   display: flex;
   align-items: center;
@@ -292,7 +292,7 @@ export const THEME_CSS = `
   border-color: var(--nc-accent);
 }
 
-/* Console Panel */
+/* 控制台列表：按日志等级区分颜色，并标识仍在追加的流式记录。 */
 .nc-console-list {
   flex: 1;
   overflow-y: auto;
@@ -337,7 +337,7 @@ export const THEME_CSS = `
   border-left: 2px solid var(--nc-accent);
 }
 
-/* Network Panel */
+/* 网络面板：表格与详情区并存，状态颜色保持与控制台一致。 */
 .nc-network-table {
   width: 100%;
   border-collapse: collapse;
@@ -398,7 +398,7 @@ export const THEME_CSS = `
   word-break: break-all;
 }
 
-/* Messages Stream (SSE/WebSocket) */
+/* 实时消息流：区分收发方向、事件名、时间戳和消息大小。 */
 .nc-messages-stream {
   max-height: 200px;
   overflow-y: auto;
@@ -455,7 +455,7 @@ export const THEME_CSS = `
   font-size: 10px;
 }
 
-/* Storage Panel */
+/* 存储面板：支持表格、详情行及危险操作的视觉反馈。 */
 .nc-storage-table {
   width: 100%;
   border-collapse: collapse;
@@ -535,7 +535,7 @@ export const THEME_CSS = `
   border-color: var(--nc-error);
 }
 
-/* Element Panel */
+/* 元素面板：沿用类源码高亮语义展示 DOM 标签、属性和值。 */
 .nc-element-tree {
   padding: 8px;
   font-size: 12px;
@@ -570,7 +570,7 @@ export const THEME_CSS = `
   transform: rotate(90deg);
 }
 
-/* System Panel */
+/* 系统面板：以键值行展示环境信息，较长文本保持可读。 */
 .nc-system-list {
   padding: 8px;
 }
@@ -614,7 +614,7 @@ export const THEME_CSS = `
   }
 }
 
-/* Modal/Dialog for storage edit */
+/* 存储编辑弹窗：遮罩负责阻断背景交互，表单保持紧凑布局。 */
 .nc-modal-overlay {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -680,7 +680,7 @@ export const THEME_CSS = `
   color: #fff;
 }
 
-/* Scrollbar */
+/* 滚动条：仅在 Shadow DOM 内应用，避免泄漏到宿主页面。 */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -696,7 +696,7 @@ export const THEME_CSS = `
   background: var(--nc-scrollbar-hover);
 }
 
-/* REPL Panel */
+/* REPL 面板：输入区固定在底部，输出区按执行结果着色。 */
 .nc-repl-output {
   flex: 1;
   overflow-y: auto;

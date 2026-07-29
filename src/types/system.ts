@@ -1,4 +1,6 @@
-/** System information */
+/** 系统面板的数据契约：描述环境信息和可选的浏览器性能指标。 */
+
+/** 系统信息。 */
 export interface SystemInfo {
   userAgent: string;
   platform: string;

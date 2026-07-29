@@ -1,3 +1,6 @@
+/**
+ * 元素检查面板视图：在树形结构与页面高亮之间协调用户的选择操作。
+ */
 import type { ElementCore } from '../core/element-core';
 
 /**

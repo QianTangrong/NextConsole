@@ -4,7 +4,6 @@
 
 [English](README.md) | [繁體中文](README.zh-TW.md) | [Français](README.fr.md)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ## 特性
 
@@ -362,7 +361,3 @@ src/
 - Safari（iOS & macOS）
 - Firefox
 - Edge
-
-## 许可证
-
-[MIT](LICENSE)

@@ -1,3 +1,6 @@
+/**
+ * 性能插件：聚合浏览器性能指标和资源加载数据，提供面向排障的性能面板。
+ */
 import type { NextConsolePlugin, PluginAPI } from '../types/plugin';
 import { escapeHTML } from '../utils/dom';
 
@@ -157,6 +160,7 @@ const PERF_CSS = `
 .nc-perf-mark-btn:hover { background: var(--nc-bg-hover); }
 `;
 
+/** 以微秒、毫秒或秒显示耗时，减少小数噪音。 */
 function formatMs(ms: number): string {
   if (ms < 1) return `${(ms * 1000).toFixed(0)} μs`;
   if (ms < 1000) return `${ms.toFixed(1)} ms`;
@@ -170,8 +174,9 @@ function formatBytes(b: number): string {
   return `${(b / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/** 基于 Web Vitals 阈值给出便于扫描的性能等级。 */
 function rateMetric(name: string, value: number): PerfMetric['rating'] {
-  // Based on Web Vitals thresholds
+  // 阈值只服务于调试展示，不替代产品侧的性能监控标准。
   switch (name) {
     case 'FCP': return value <= 1800 ? 'good' : value <= 3000 ? 'needs-improvement' : 'poor';
     case 'LCP': return value <= 2500 ? 'good' : value <= 4000 ? 'needs-improvement' : 'poor';
@@ -202,6 +207,7 @@ function getShortName(url: string): string {
   }
 }
 
+/** 从 Performance API 汇总核心体验指标，缺失的浏览器能力会被自然跳过。 */
 function collectCoreMetrics(): PerfMetric[] {
   const metrics: PerfMetric[] = [];
 
@@ -247,6 +253,7 @@ function collectCoreMetrics(): PerfMetric[] {
   return metrics;
 }
 
+/** 将资源时间线转为列表条目，不读取或暴露资源响应正文。 */
 function collectResources(): ResourceEntry[] {
   return (performance.getEntriesByType('resource') as PerformanceResourceTiming[])
     .map((r) => ({
@@ -271,6 +278,7 @@ function collectLongTasks(): { startTime: number; duration: number }[] {
   }
 }
 
+/** 创建性能插件，并在可用时订阅长任务以补充资源时间线无法覆盖的卡顿。 */
 export function createPerformancePlugin(): NextConsolePlugin {
   let container: HTMLElement;
   let longTaskObserver: PerformanceObserver | null = null;

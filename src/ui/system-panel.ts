@@ -1,3 +1,6 @@
+/**
+ * 系统面板视图：将浏览器环境和性能采集结果分组呈现给调试者。
+ */
 import { getSystemInfo } from '../core/system-core';
 import { escapeHTML } from '../utils/dom';
 

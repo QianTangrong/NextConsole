@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- 移动端演示页面：覆盖安全区域、触摸操作和窄屏调试面板的适配场景。 -->
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
@@ -230,6 +231,7 @@
   </div>
 
   <script type="module">
+    // 移动端示例复用源码入口，并额外加载资源与性能插件验证插件标签的窄屏表现。
     import NextConsole from '../src/index.ts';
     import { createSourcePlugin } from '../src/plugins/source-plugin.ts';
     import { createPerformancePlugin } from '../src/plugins/performance-plugin.ts';
@@ -288,6 +290,9 @@
       '代码质量方面，NextConsole 使用 Shadow DOM 实现完全隔离，不会污染宿主页面的样式和 DOM。销毁时会恢复所有被拦截的原生 API（console、fetch、XHR、EventSource）。',
     ];
 
+    /**
+     * 模拟逐字符 AI 输出：页面气泡和 NextConsole 共享 streamId，便于对照两端更新节奏。
+     */
     async function streamReply(text) {
       const bubble = addAIBubble();
       const typingEl = bubble.querySelector('.typing');
@@ -438,7 +443,7 @@
             console.info(`📡 SSE 完成，共接收 ${sseCount} 条事件`, JSON.parse(event.data));
             updateLogCount();
           });
-          // Listen to all named events
+          // 显式监听全部命名事件，验证 EventSource 事件名和消息正文都会被网络核心记录。
           ['connected','user_login','order_created','notification','chat_message','data_sync','heartbeat','user_logout'].forEach(evtName => {
             evtSource.addEventListener(evtName, (event) => {
               sseCount++;
@@ -452,7 +457,7 @@
             evtSource.close();
             console.warn('📡 SSE 服务不可用，请先启动: node examples/server.js');
             updateLogCount();
-            // Fallback mock
+          // 本地 SSE 服务不可用时使用本地模拟数据，保持演示页可离线验证。
             (async () => {
               const mockId = `sse-mock-${Date.now()}`;
               const mockData = [
@@ -531,7 +536,7 @@
               clearTimeout(wsTimeout);
               console.log('🔌 WebSocket 已连接');
               updateLogCount();
-              // Send test messages
+              // 建连成功后发送多种载荷，用于验证 WebSocket 的出站消息记录。
               const testMsgs = [
                 JSON.stringify({ action: 'ping' }),
                 JSON.stringify({ action: 'get_users' }),
@@ -813,7 +818,7 @@
           }
 
           await sleep(500);
-          // Trigger stream last
+          // 将流式用例放在最后，避免其他测试日志与流式视觉效果互相干扰。
           addUserBubble('全功能测试完成！');
           await sleep(300);
           await streamReply('🎉 所有功能测试完成！\n\n✅ Console — 日志捕获、错误/警告堆栈\n✅ Network — Fetch/XHR 拦截\n✅ Storage — localStorage/sessionStorage/Cookie\n✅ Element — DOM 树查看\n✅ System — 系统信息\n✅ REPL — JS 命令执行\n✅ Source — 源码查看插件\n✅ Perf — 性能分析插件\n✅ Plugin — 自定义插件注册\n\n你可以逐个面板查看各项功能的测试结果。');

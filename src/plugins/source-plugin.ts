@@ -1,3 +1,6 @@
+/**
+ * 源码插件：枚举页面脚本与样式资源，并以只读方式展示其来源和内容摘要。
+ */
 import type { NextConsolePlugin, PluginAPI } from '../types/plugin';
 import { escapeHTML } from '../utils/dom';
 
@@ -130,12 +133,14 @@ const SOURCE_CSS = `
 }
 `;
 
+/** 将资源字节数格式化为紧凑且稳定的展示文本。 */
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/** 收集当前文档可访问的脚本和样式资源；内联内容仅保留必要元数据。 */
 function collectSources(): SourceEntry[] {
   const entries: SourceEntry[] = [];
 
@@ -170,6 +175,7 @@ function collectSources(): SourceEntry[] {
   return entries;
 }
 
+/** 优先使用资源文件名作为展示名，无法解析 URL 时回退到完整来源。 */
 function getDisplayName(entry: SourceEntry): string {
   if (entry.url) {
     try {
@@ -183,6 +189,7 @@ function getDisplayName(entry: SourceEntry): string {
   return preview + (preview.length >= 60 ? '...' : '');
 }
 
+/** 创建只读源码检查插件，避免对宿主脚本和样式产生任何修改。 */
 export function createSourcePlugin(): NextConsolePlugin {
   let container: HTMLElement;
   let currentView: 'list' | 'detail' = 'list';

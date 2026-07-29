@@ -1,3 +1,6 @@
+/**
+ * Vite 库构建配置：以 src/index.ts 为入口，同时生成 ES、UMD 与 TypeScript 声明文件。
+ */
 import { defineConfig } from 'vite';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';

@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- 桌面端演示页面：集中触发日志、网络、存储和插件功能，便于手工回归。 -->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -128,7 +129,7 @@
 &lt;/script&gt;</pre>
   </div>
 
-  <!-- Load NextConsole from source (Vite dev mode) -->
+  <!-- 开发模式直接从源码加载 NextConsole，便于演示页同步验证最新实现。 -->
   <script type="module">
     import NextConsole from '../src/index.ts';
 
@@ -137,10 +138,10 @@
       panelHeight: 0.4,
     });
 
-    // Expose to global for demo buttons
+    // 将实例暴露到全局，页面按钮和开发者工具都能调用同一个调试器实例。
     window.nc = nc;
 
-    // Demo functions
+    // 基础日志用例覆盖不同日志级别、对象参数和大量连续写入。
     window.demoLog = () => console.log('Hello from NextConsole!', { version: '1.0.0', ts: Date.now() });
     window.demoInfo = () => console.info('ℹ️ Info message', 'Multiple args supported');
     window.demoWarn = () => console.warn('⚠️ Warning: something looks off', { code: 'W001' });
@@ -159,6 +160,7 @@
       console.log('--- Burst complete ---');
     };
 
+    /** 以同一 streamId 追加分块文本，验证面板的流式合并与实时刷新。 */
     window.demoStream = () => {
       const output = document.getElementById('demo-output');
       const streamId = 'demo-' + Date.now();
@@ -182,7 +184,7 @@
     window.demoSSEStream = () => {
       const output = document.getElementById('demo-output');
       output.textContent = 'Simulating SSE data events...\n';
-      // Simulate SSE-like behavior through console streaming
+      // 通过 console 流式 API 模拟 SSE 消息，以便不依赖本地服务也能回归该展示路径。
       const streamId = 'sse-demo-' + Date.now();
       const events = [
         'data: {"token": "Hello"}',
@@ -204,6 +206,7 @@
       }, 300);
     };
 
+    /** 普通 fetch、失败请求和 XHR 分别验证网络核心的三条采集链路。 */
     window.demoFetch = async () => {
       try {
         const res = await fetch('https://jsonplaceholder.typicode.com/posts/1');
@@ -230,6 +233,7 @@
       xhr.send();
     };
 
+    /** 写入带 nc_ 前缀的演示数据，方便在存储面板中识别且不会影响业务键。 */
     window.demoStorage = () => {
       localStorage.setItem('nc_demo_key', JSON.stringify({ hello: 'world', ts: Date.now() }));
       sessionStorage.setItem('nc_session_test', 'session value ' + Date.now());

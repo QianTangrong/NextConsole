@@ -1,10 +1,13 @@
+/**
+ * REPL 面板视图：提供命令输入、历史导航和安全格式化的执行结果展示。
+ */
 import type { ReplCore, ReplEntry } from '../core/repl-core';
 import { escapeHTML } from '../utils/dom';
 import { highlightJSON } from '../utils/json';
 import { formatTime } from '../utils/time';
 
 /**
- * REPL panel with command input, output display, and command history.
+ * REPL 面板：管理命令输入、执行结果与历史导航，展示层不直接执行用户代码。
  */
 export class ReplPanel {
   private container: HTMLElement;
@@ -45,7 +48,7 @@ export class ReplPanel {
   }
 
   private bindEvents(): void {
-    // Run button
+    // 点击和快捷键共用 executeInput，避免不同入口造成历史记录不一致。
     this.container.querySelector('.nc-repl-run')!.addEventListener('click', () => {
       this.executeInput();
     });
@@ -97,6 +100,7 @@ export class ReplPanel {
     this.core.execute(code);
   }
 
+  /** 在历史边界保留空输入状态，符合终端上下方向键的预期。 */
   private navigateHistory(direction: number): void {
     const history = this.core.getHistory();
     if (history.length === 0) return;
@@ -128,6 +132,7 @@ export class ReplPanel {
     this.autoResize();
   }
 
+  /** 追加单条执行记录并滚动到底部，保证异步输出也能被立即看到。 */
   private appendEntry(entry: ReplEntry): void {
     const row = document.createElement('div');
     row.className = `nc-repl-row nc-repl-${entry.type}`;

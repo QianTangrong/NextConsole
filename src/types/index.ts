@@ -1,3 +1,6 @@
+/**
+ * 对外暴露的公共类型汇总：定义面板配置、事件和各子模块的数据契约。
+ */
 import type { ConsoleOptions } from './console';
 import type { MimoAIDiagnosisOptions } from './mimo-diagnosis';
 import type { NetworkOptions } from './network';

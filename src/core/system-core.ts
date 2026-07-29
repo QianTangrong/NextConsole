@@ -1,3 +1,6 @@
+/**
+ * 系统信息采集：把浏览器、显示设备、网络和性能 API 转为面板可直接展示的数据。
+ */
 import type { SystemInfo, PerformanceMetrics } from '../types';
 
 /**

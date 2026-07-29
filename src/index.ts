@@ -1,3 +1,6 @@
+/**
+ * NextConsole 的公共入口：导出类型、内置插件和控制台实例 API。
+ */
 import type { NextConsoleConfig, PanelTab, LogLevel, LogEntry, NetworkEntry, NextConsolePlugin } from './types';
 import { MainPanel } from './ui/main-panel';
 

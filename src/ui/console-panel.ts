@@ -1,3 +1,6 @@
+/**
+ * 控制台面板视图：负责日志筛选、增量渲染、流式日志更新与用户交互。
+ */
 import type { LogEntry, LogLevel } from '../types';
 import type { ConsoleCore } from '../core/console-core';
 import { formatTime } from '../utils/time';
@@ -7,7 +10,7 @@ import { escapeHTML } from '../utils/dom';
 const MAX_RENDER = 500;
 
 /**
- * Console panel with auto-height rows that support text wrapping.
+ * 控制台面板：渲染可换行日志行，并处理筛选、搜索、流式刷新和 AI 导出交互。
  */
 export class ConsolePanel {
   private container: HTMLElement;
@@ -18,6 +21,7 @@ export class ConsolePanel {
   private activeFilters = new Set<LogLevel>();
   private searchText = '';
   private scrollLocked = true;
+  /** 高频日志更新合并到动画帧中，非可见面板仅标记待刷新状态。 */
   private renderRAF: number | null = null;
   private needsRefresh = false;
   private cleanups: (() => void)[] = [];
@@ -34,7 +38,7 @@ export class ConsolePanel {
   }
 
   private render(): void {
-    // Toolbar
+    // 工具栏与列表分离，刷新日志时无需重建筛选和操作控件。
     this.toolbarEl = document.createElement('div');
     this.toolbarEl.className = 'nc-toolbar nc-console-toolbar';
     this.toolbarEl.innerHTML = `
@@ -63,7 +67,7 @@ export class ConsolePanel {
   }
 
   private bindEvents(): void {
-    // Filter buttons
+    // 筛选按钮委托给工具栏，避免为每种日志级别分别绑定监听器。
     this.toolbarEl.addEventListener('click', (e) => {
       const btn = (e.target as HTMLElement).closest('[data-nc-filter]') as HTMLElement;
       if (btn) {
@@ -131,6 +135,7 @@ export class ConsolePanel {
     this.cleanups.push(unsub1, unsub2, unsub3);
   }
 
+  /** 面板不可见时延迟刷新，重新激活后再渲染，避免后台标签持续创建 DOM。 */
   private scheduleRefresh(): void {
     if (!this.isRenderable()) {
       this.needsRefresh = true;
@@ -166,7 +171,7 @@ export class ConsolePanel {
 
   private renderList(): void {
     const entries = this.filteredEntries;
-    // Only render the last MAX_RENDER entries for performance
+    // 只渲染最新记录，内存中的完整日志仍由 ConsoleCore 保留并可导出。
     const start = Math.max(0, entries.length - MAX_RENDER);
 
     let html = '';

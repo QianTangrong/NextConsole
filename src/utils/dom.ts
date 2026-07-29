@@ -1,6 +1,9 @@
+/**
+ * DOM 通用工具：统一类名前缀、节点创建、事件清理和 HTML 转义，降低跨面板实现差异。
+ */
 const NC_PREFIX = 'nc-';
 
-/** Create a DOM element with optional attributes and children */
+/** 根据标签、属性与子节点创建 DOM 元素，字符串子节点始终以文本节点插入。 */
 export function createElement<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   attrs?: Record<string, string>,
@@ -28,27 +31,27 @@ export function createElement<K extends keyof HTMLElementTagNameMap>(
   return el;
 }
 
-/** Add namespaced class */
+/** 为样式类添加 NextConsole 前缀，避免与宿主页面类名冲突。 */
 export function ncClass(...names: string[]): string {
   return names.map((n) => `${NC_PREFIX}${n}`).join(' ');
 }
 
-/** Set innerHTML safely within shadow DOM (no external leak) */
+/** 在受控的 Shadow DOM 容器中写入已由调用方构造的 HTML。 */
 export function setHTML(el: HTMLElement, html: string): void {
   el.innerHTML = html;
 }
 
-/** Query within a container */
+/** 在指定容器内查询首个匹配元素。 */
 export function $(selector: string, container: ParentNode = document): HTMLElement | null {
   return container.querySelector(selector);
 }
 
-/** Query all within a container */
+/** 在指定容器内查询全部匹配元素。 */
 export function $$(selector: string, container: ParentNode = document): HTMLElement[] {
   return Array.from(container.querySelectorAll(selector));
 }
 
-/** Attach event listener and return cleanup function */
+/** 绑定事件并返回对应的清理函数，便于组件销毁时统一释放。 */
 export function on<K extends keyof HTMLElementEventMap>(
   el: EventTarget,
   event: K,
@@ -59,12 +62,12 @@ export function on<K extends keyof HTMLElementEventMap>(
   return () => el.removeEventListener(event, handler as EventListener, options);
 }
 
-/** Clamp a number between min and max */
+/** 将数值限制在闭区间内，用于拖拽坐标等边界敏感值。 */
 export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-/** Escape HTML entities to prevent XSS */
+/** 转义 HTML 特殊字符，避免不可信文本被当作标签或属性解析。 */
 export function escapeHTML(str: string): string {
   return str
     .replace(/&/g, '&amp;')

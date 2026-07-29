@@ -1,3 +1,6 @@
+/**
+ * 网络采集核心：统一记录 fetch、XHR、SSE 和 WebSocket 的请求生命周期及消息流。
+ */
 import type { NetworkEntry, NetworkOptions, SSEEvent, StreamMessage } from '../types';
 import { EventEmitter } from '../utils/event-emitter';
 import { nextId } from '../utils/time';
@@ -20,7 +23,9 @@ const DEFAULT_OPTIONS: NetworkOptions = {
   maxFetchStreamResponseChars: 1_000_000,
 };
 
+/** 面板内单个实时通道最多保留的消息数，避免长连接无限增长。 */
 const MAX_MESSAGES = 1000;
+/** 非流式响应体预览的字符和字节双重上限。 */
 const MAX_BODY_PREVIEW_CHARS = 10000;
 const MAX_BODY_PREVIEW_BYTES = 10000;
 const STREAMING_CONTENT_TYPES = [
@@ -79,7 +84,7 @@ function isStreamingContentType(contentType: string): boolean {
   return STREAMING_CONTENT_TYPES.some((type) => contentType.includes(type)) || contentType.includes('stream');
 }
 
-/** Serialize request body for display */
+/** 将请求体归一化为可安全展示的轻量描述，不直接保留二进制内容。 */
 function serializeBody(body: unknown): unknown {
   if (body === null || body === undefined) return null;
   if (typeof body === 'string') return body;
@@ -136,18 +141,19 @@ function serializeXHRResponse(xhr: XMLHttpRequest): unknown {
 }
 
 /**
- * NetworkCore hooks into fetch, XMLHttpRequest, and EventSource
- * to capture network activity including SSE streams.
+   * 接管 fetch、XMLHttpRequest、EventSource 和 WebSocket，采集普通请求与实时流活动。
  */
 export class NetworkCore extends EventEmitter<NetworkEvents> {
   private entries: NetworkEntry[] = [];
   private options: NetworkOptions;
+  /** 原生构造器与方法的引用只用于销毁时恢复，不能从代理中再次读取。 */
   private originalFetch: typeof window.fetch | null = null;
   private originalXHR: typeof XMLHttpRequest.prototype.open | null = null;
   private originalXHRSend: typeof XMLHttpRequest.prototype.send | null = null;
   private originalXHRSetHeader: typeof XMLHttpRequest.prototype.setRequestHeader | null = null;
   private originalEventSource: typeof EventSource | null = null;
   private originalWebSocket: typeof WebSocket | null = null;
+  /** 为每条流式请求合并视图刷新，既保留实时性也避免逐 chunk 重绘。 */
   private scheduledStreamUpdates = new Map<number, { type: 'raf' | 'timeout'; handle: number }>();
   private fetchIgnoreRules = new Set<FetchIgnoreRule>();
   private hooked = false;
@@ -166,6 +172,9 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
     this.hooked = true;
   }
 
+  /**
+   * 用代理包裹 fetch；代理始终返回原始 Response，因此不会改变业务侧的消费语义。
+   */
   private hookFetch(): void {
     this.originalFetch = window.fetch.bind(window);
     const self = this;
@@ -249,6 +258,9 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
     return false;
   }
 
+  /**
+   * 响应刚返回时立即克隆，用副本异步读取预览，避免 body 被业务代码消费后无法再采集。
+   */
   private startFetchBodyCapture(response: Response, entry: NetworkEntry, method: string): void {
     let clone: Response;
     try {
@@ -263,6 +275,7 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
     void this.captureFetchBody(clone, entry, method);
   }
 
+  /** 根据响应类型选择普通文本预览、实时流捕获或跳过原因。 */
   private async captureFetchBody(response: Response, entry: NetworkEntry, method: string): Promise<void> {
     const skipReason = this.getBodySkipReason(response, method);
     if (skipReason === null) return;
@@ -298,6 +311,9 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
     this.emit('update', entry);
   }
 
+  /**
+   * 返回 null 表示没有响应体，字符串表示可展示的跳过原因，undefined 则允许继续读取。
+   */
   private getBodySkipReason(response: Response, method: string): string | null | undefined {
     if (method === 'HEAD' || [204, 205, 304].includes(response.status) || !response.body) {
       return null;
@@ -335,6 +351,7 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
     return undefined;
   }
 
+  /** 逐块解码普通响应，在达到上限后主动取消读取以控制内存占用。 */
   private async readTextPreview(response: Response, maxChars: number): Promise<{ text: string; truncated: boolean }> {
     if (!response.body) return { text: '', truncated: false };
 
@@ -371,6 +388,9 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
     return { text, truncated };
   }
 
+  /**
+   * 实时读取流式响应并持续更新同一请求条目；不等待流结束才展示，方便定位卡顿点。
+   */
   private async captureFetchStream(response: Response, entry: NetworkEntry): Promise<void> {
     if (!response.body) return;
 
@@ -439,6 +459,9 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
     this.scheduleStreamUpdate(entry);
   }
 
+  /**
+   * 浏览器可用时以动画帧合并更新；没有动画帧 API 时退回短定时器，兼容非可视环境。
+   */
   private scheduleStreamUpdate(entry: NetworkEntry): void {
     if (this.scheduledStreamUpdates.has(entry.id)) return;
 
@@ -474,6 +497,7 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
     this.emit('update', entry);
   }
 
+  /** 通过覆写 XHR 原型方法保存请求元数据，并在 loadend 时写入最终响应。 */
   private hookXHR(): void {
     const self = this;
     const origOpen = XMLHttpRequest.prototype.open;
@@ -566,6 +590,7 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
     };
   }
 
+  /** 代理 EventSource 的事件注册，既保留业务监听器又将消息追加到 NetworkEntry。 */
   private hookSSE(): void {
     if (typeof EventSource === 'undefined') return;
     const self = this;
@@ -711,6 +736,7 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
     (window as any).EventSource = ProxiedES;
   }
 
+  /** 代理 WebSocket 构造器与收发方法，记录双向消息但不改变连接行为。 */
   private hookWebSocket(): void {
     if (typeof WebSocket === 'undefined') return;
     const self = this;
@@ -800,6 +826,7 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
     (window as any).WebSocket = ProxiedWS;
   }
 
+  /** 写入新请求后从最旧记录开始裁剪，确保采集量受 maxRequests 约束。 */
   private addEntry(entry: NetworkEntry): void {
     this.entries.push(entry);
     if (this.entries.length > this.options.maxRequests) {

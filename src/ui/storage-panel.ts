@@ -1,9 +1,12 @@
+/**
+ * 存储面板视图：按存储类型筛选条目，并提供受控的编辑与删除操作。
+ */
 import type { StorageType } from '../types';
 import type { StorageCore } from '../core/storage-core';
 import { escapeHTML } from '../utils/dom';
 
 /**
- * Storage panel for viewing/editing localStorage, sessionStorage, and cookies.
+ * 存储面板：查看和编辑 localStorage、sessionStorage 与 Cookie，所有写入交由 StorageCore 完成。
  */
 export class StoragePanel {
   private container: HTMLElement;
@@ -52,7 +55,7 @@ export class StoragePanel {
   }
 
   private bindEvents(): void {
-    // Type filter
+    // 类型筛选与行操作使用容器事件委托，表格刷新不会丢失交互能力。
     this.container.addEventListener('click', (e) => {
       const btn = (e.target as HTMLElement).closest('[data-nc-stype]') as HTMLElement;
       if (btn) {
@@ -129,6 +132,7 @@ export class StoragePanel {
     this.cleanups.push(unsub);
   }
 
+  /** 重新从核心读取数据，而非维护本地乐观副本，保证展示与浏览器存储一致。 */
   refreshTable(): void {
     if (!this.tableBody) return;
 
@@ -195,6 +199,7 @@ export class StoragePanel {
     });
   }
 
+  /** 统一创建新增/编辑表单；保存前由核心层处理不同存储介质的语义差异。 */
   private showModal(
     title: string,
     defaults: { type: string; key: string; value: string },

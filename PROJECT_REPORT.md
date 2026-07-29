@@ -11,7 +11,6 @@ NextConsole 是一个面向移动 H5 和现代 Web 的前端调试控制台库�
 | --- | --- |
 | 包名 | `@royalscome/nextconsole` |
 | 版本 | `1.0.4` |
-| License | MIT |
 | 主入口 | `dist/nextconsole.umd.js` |
 | ESM 入口 | `dist/nextconsole.es.js` |
 | 类型入口 | `dist/index.d.ts` |

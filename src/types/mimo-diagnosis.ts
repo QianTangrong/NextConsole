@@ -1,3 +1,6 @@
+/**
+ * AI 诊断插件的数据契约：明确可传递的脱敏错误上下文和业务侧扩展边界。
+ */
 import type { LogSource } from './console';
 
 /**

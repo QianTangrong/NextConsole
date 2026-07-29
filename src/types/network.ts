@@ -1,4 +1,6 @@
-/** HTTP method types */
+/** 网络模块的数据契约：统一描述被捕获请求、实时消息和采集开关。 */
+
+/** HTTP 方法类型。 */
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD' | 'OPTIONS' | string;
 
 /** Request type */

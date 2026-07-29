@@ -1,4 +1,6 @@
-/** Log level types */
+/** 控制台模块的数据契约：日志级别、来源、日志条目和采集配置。 */
+
+/** 日志级别类型。 */
 export type LogLevel = 'log' | 'info' | 'warn' | 'error' | 'debug';
 
 /** 日志条目的来源。 */

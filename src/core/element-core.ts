@@ -1,13 +1,17 @@
+/**
+ * DOM 元素检查核心：生成安全的节点树，并在页面上高亮当前查看的元素。
+ */
 import { escapeHTML, ncClass } from '../utils/dom';
 
 /**
- * Simple DOM tree viewer with collapsible nodes and hover highlight.
+ * 生成可折叠 DOM 树，并在用户悬停节点时以独立遮罩高亮对应页面元素。
  */
 export class ElementCore {
+  /** 高亮层独立于被检查元素，避免向宿主 DOM 注入临时样式或属性。 */
   private highlightOverlay: HTMLElement | null = null;
 
   init(): void {
-    // Create overlay for element highlighting
+    // 遮罩使用 fixed 定位，滚动页面时仍可准确贴合视口内的目标元素。
     this.highlightOverlay = document.createElement('div');
     Object.assign(this.highlightOverlay.style, {
       position: 'fixed',
@@ -20,11 +24,12 @@ export class ElementCore {
     document.body.appendChild(this.highlightOverlay);
   }
 
-  /** Render a collapsible DOM tree starting from a root element */
+  /** 从指定根节点生成受最大深度限制的可折叠 DOM 树。 */
   renderTree(root: Element = document.documentElement, maxDepth = 8): string {
     return this.renderNode(root, 0, maxDepth);
   }
 
+  /** 递归输出节点 HTML；深度上限防止超大页面生成难以操作的完整树。 */
   private renderNode(node: Element, depth: number, maxDepth: number): string {
     if (depth >= maxDepth) {
       return `<div class="${ncClass('dom-node')}" style="padding-left:${depth * 16}px">...</div>`;
@@ -92,7 +97,7 @@ export class ElementCore {
     return tag;
   }
 
-  /** Highlight an element in the viewport */
+  /** 根据内部生成的选择器定位元素，并同步遮罩的实际边界。 */
   highlight(selector: string): void {
     if (!this.highlightOverlay) return;
     try {

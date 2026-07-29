@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- 综合测试页面：通过可交互的控件覆盖控制台、网络、存储和异常采集场景。 -->
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
@@ -215,6 +216,7 @@
   </div>
 
   <script type="module">
+    // 此页按模块分组暴露手工回归函数，所有函数均只操作 nc_ 命名空间的演示数据。
     import NextConsole from '../src/index.ts';
 
     // 初始化
@@ -222,6 +224,7 @@
     window.nc = nc;
     const output = document.getElementById('output');
 
+    /** 更新测试页自身输出，不经过 NextConsole，避免说明文字污染被测日志集合。 */
     function log(msg) { output.textContent += msg + '\n'; output.scrollTop = output.scrollHeight; }
     function clearOutput() { output.textContent = ''; }
 
@@ -283,6 +286,7 @@
     };
 
     // ==================== 性能测试 ====================
+    /** 大量连续日志用于观察采集上限、批量刷新和浏览器主线程负载。 */
     function burstLogs(count) {
       const perfEl = document.getElementById('perf-result');
       const start = performance.now();
@@ -313,6 +317,7 @@
     };
 
     // ==================== 流式日志测试 ====================
+    /** 用不同频率和载荷模拟流式日志，验证相同 streamId 的追加与结束状态。 */
     function simulateStream(id, text, interval) {
       clearOutput();
       let idx = 0;
@@ -423,6 +428,7 @@
     };
 
     // ==================== Network 测试 ====================
+    /** 网络用例包含成功、4xx、慢请求、XHR 和并发请求，覆盖主要采集分支。 */
     window.testFetchGet = async () => {
       try {
         const res = await fetch('https://jsonplaceholder.typicode.com/posts/1');
@@ -483,6 +489,7 @@
     };
 
     // ==================== Storage 测试 ====================
+    /** 存储用例仅写入 nc_ 前缀键，以便清理函数可精确回收演示数据。 */
     window.testLocalStorage = () => {
       localStorage.setItem('nc_test_string', 'hello world');
       localStorage.setItem('nc_test_json', JSON.stringify({ name: '测试', ts: Date.now() }));
@@ -541,6 +548,7 @@
     };
 
     // ==================== 面板控制 ====================
+    /** 导出用例创建临时 Blob URL，下载后立即释放，避免测试页累积对象 URL。 */
     window.testExport = () => {
       const json = nc.exportLogs();
       const count = JSON.parse(json).length;

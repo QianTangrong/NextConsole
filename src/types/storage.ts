@@ -1,4 +1,6 @@
-/** Storage type */
+/** 浏览器存储模块的数据契约：包含支持的存储介质、条目字段和显示开关。 */
+
+/** 存储介质类型。 */
 export type StorageType = 'localStorage' | 'sessionStorage' | 'cookie';
 
 /** Storage entry */

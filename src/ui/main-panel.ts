@@ -1,3 +1,6 @@
+/**
+ * 调试器主容器：创建 Shadow DOM，协调各核心模块、内置面板、插件和整体生命周期。
+ */
 import type { PanelTab, NextConsoleConfig, NextConsolePlugin, PluginAPI } from '../types';
 import { ConsoleCore } from '../core/console-core';
 import { NetworkCore } from '../core/network-core';
@@ -26,7 +29,7 @@ const TABS: { key: PanelTab; label: string }[] = [
 ];
 
 /**
- * Main panel shell: manages shadow DOM, tabs, resizing, and sub-panels.
+ * 主面板外壳：管理 Shadow DOM、标签切换、尺寸调整、子面板和插件生命周期。
  */
 export class MainPanel {
   private host: HTMLElement;
@@ -88,7 +91,7 @@ export class MainPanel {
     }
   }
 
-  /** Initialize everything */
+  /** 初始化核心模块与界面；挂载函数可等待 DOM 就绪后安全执行。 */
   init(): void {
     const mount = () => {
       if (this.destroyed || this.mounted) return;
@@ -147,6 +150,7 @@ export class MainPanel {
     }
   }
 
+  /** 创建 Shadow DOM 内部结构；所有查询均限制在 shadow 范围，避免碰触宿主节点。 */
   private createPanel(): void {
     this.backdropEl = document.createElement('div');
     this.backdropEl.className = 'nc-backdrop';
@@ -217,6 +221,7 @@ export class MainPanel {
     this.activatePanel(this.activeTab);
   }
 
+  /** 切换标签时同步按钮状态和面板可见性，插件标签遵循同一协议。 */
   private switchTab(tab: string): void {
     if (tab === this.activeTab) return;
     this.activeTab = tab;
@@ -289,6 +294,7 @@ export class MainPanel {
     }
   }
 
+  /** 基于指针纵向移动更新面板高度，并始终将结果夹在可用视口范围内。 */
   private bindResize(handle: HTMLElement): void {
     let startY = 0;
     let startHeight = 0;
@@ -325,14 +331,14 @@ export class MainPanel {
     );
   }
 
-  /** Show the panel */
+  /** 显示面板并触发外部可观测的 show 事件。 */
   show(): void {
     if (this.visible) return;
     this.visible = true;
     this.applyVisibility();
   }
 
-  /** Hide the panel */
+  /** 隐藏面板，但保留已采集数据与各子面板状态。 */
   hide(): void {
     if (!this.visible) return;
     this.visible = false;
@@ -352,7 +358,7 @@ export class MainPanel {
     }
   }
 
-  /** Toggle panel visibility */
+  /** 在显示与隐藏状态间切换。 */
   toggle(): void {
     if (this.visible) {
       this.hide();
@@ -361,22 +367,22 @@ export class MainPanel {
     }
   }
 
-  /** Check if panel is visible */
+  /** 返回当前面板是否可见。 */
   isVisible(): boolean {
     return this.visible;
   }
 
-  /** Get the console core for API access */
+  /** 暴露日志核心的只读访问入口。 */
   getConsoleCore(): ConsoleCore {
     return this.consoleCore;
   }
 
-  /** Get the network core for API access */
+  /** 暴露网络核心的只读访问入口。 */
   getNetworkCore(): NetworkCore {
     return this.networkCore;
   }
 
-  /** Get the storage core for API access */
+  /** 暴露存储核心的只读访问入口。 */
   getStorageCore(): StorageCore {
     return this.storageCore;
   }
@@ -410,7 +416,7 @@ export class MainPanel {
     }
   }
 
-  /** Set theme */
+  /** 运行时切换主题，主题类只应用于 NextConsole 根节点。 */
   setTheme(theme: 'dark' | 'light'): void {
     this.applyTheme(theme);
   }
@@ -423,9 +429,9 @@ export class MainPanel {
     }
   }
 
-  /** Register a plugin */
+  /** 注册插件；同名插件仅保留首次注册的实例，避免重复钩子和标签。 */
   use(plugin: NextConsolePlugin): void {
-    // Deduplicate by name
+    // 名称既是插件身份也是标签键，重复安装会造成生命周期难以对称清理。
     if (this.plugins.some((p) => p.name === plugin.name)) return;
     this.plugins.push(plugin);
 
@@ -434,6 +440,7 @@ export class MainPanel {
     }
   }
 
+  /** 延迟创建插件 API，确保所有插件共享同一组核心实例和样式注入入口。 */
   private getPluginAPI(): PluginAPI {
     if (!this.pluginAPI) {
       this.pluginAPI = {
@@ -502,7 +509,7 @@ export class MainPanel {
     }
   }
 
-  /** Completely destroy and clean up */
+  /** 完整销毁：先卸载插件，再恢复核心代理并移除 Shadow DOM 宿主。 */
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;

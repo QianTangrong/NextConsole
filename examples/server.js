@@ -1,10 +1,16 @@
+/**
+ * 本地联调服务：提供 CORS 响应、流式接口和 WebSocket 回显，用于验证网络采集能力。
+ */
 const http = require('http');
 const { WebSocketServer } = require('ws');
 
 const PORT = 3210;
 
+/**
+ * 演示请求路由：CORS 允许静态示例跨源调用，仅用于本地联调，不能作为生产服务配置。
+ */
 const server = http.createServer((req, res) => {
-  // CORS
+  // 统一返回跨域头，方便直接从 file/Vite 静态示例页面验证网络捕获。
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', '*');
@@ -98,7 +104,7 @@ const server = http.createServer((req, res) => {
   res.end('Not Found');
 });
 
-// WebSocket
+// WebSocket 回显与定时推送用于验证双向消息采集和断开清理。
 const wss = new WebSocketServer({ server, path: '/ws' });
 
 wss.on('connection', (ws) => {

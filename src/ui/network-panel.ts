@@ -1,3 +1,6 @@
+/**
+ * 网络面板视图：以可筛选、可排序的表格展示请求详情、响应体和实时流消息。
+ */
 import type { NetworkEntry, StreamMessage } from '../types';
 import type { NetworkCore } from '../core/network-core';
 import { formatDuration, formatTime } from '../utils/time';
@@ -8,7 +11,7 @@ type SortKey = 'url' | 'method' | 'status' | 'duration' | 'type';
 type SortDir = 'asc' | 'desc';
 
 /**
- * Network panel showing fetch/XHR/SSE requests in a sortable table.
+ * 网络面板：以可排序表格呈现 fetch/XHR/SSE/WebSocket 请求，并显示详情和实时消息。
  */
 export class NetworkPanel {
   private container: HTMLElement;
@@ -19,6 +22,7 @@ export class NetworkPanel {
   private sortKey: SortKey = 'duration';
   private sortDir: SortDir = 'desc';
   private searchText = '';
+  /** 将同一帧内的多次网络更新折叠为一次 DOM 刷新。 */
   private renderRAF: number | null = null;
   private needsRefresh = false;
   private cleanups: (() => void)[] = [];
@@ -61,7 +65,7 @@ export class NetworkPanel {
   }
 
   private bindEvents(): void {
-    // Sort
+    // 排序事件使用委托，表头重渲染后无需重复注册。
     this.container.querySelectorAll('[data-nc-sort]').forEach((th) => {
       th.addEventListener('click', () => {
         const key = (th as HTMLElement).dataset.ncSort as SortKey;
@@ -112,6 +116,7 @@ export class NetworkPanel {
     this.cleanups.push(unsub1, unsub2, unsub3);
   }
 
+  /** 非活动标签只记录待刷新，避免流式请求在后台反复创建详情节点。 */
   private scheduleRefresh(): void {
     if (!this.isRenderable()) {
       this.needsRefresh = true;
@@ -187,6 +192,7 @@ export class NetworkPanel {
     this.tableBody.innerHTML = html;
   }
 
+  /** 按当前选中条目构建详情；响应体和实时消息均通过转义后的展示工具输出。 */
   private showDetail(): void {
     if (!this.detailEl || !this.selectedId) return;
 

@@ -1,7 +1,10 @@
+/**
+ * 悬浮入口按钮：处理拖拽、边缘吸附和显示/隐藏面板的点击行为。
+ */
 import { clamp, on } from '../utils/dom';
 
 /**
- * Draggable floating button with edge-snapping.
+ * 可拖拽的悬浮入口：区分点击与拖拽，并在拖拽结束后吸附到最近的水平边缘。
  */
 export class FloatButton {
   private el: HTMLElement;
@@ -35,6 +38,7 @@ export class FloatButton {
     this.bindEvents();
   }
 
+  /** 位置始终限制在可视区域，防止缩放或旋转后按钮完全移出屏幕。 */
   private setPosition(x: number, y: number): void {
     const maxX = window.innerWidth - 48;
     const maxY = window.innerHeight - 48;
@@ -45,7 +49,7 @@ export class FloatButton {
   }
 
   private bindEvents(): void {
-    // Touch events for mobile
+    // 触摸事件与鼠标事件并行支持，移动端不依赖桌面端指针行为。
     this.cleanups.push(
       on(this.el, 'touchstart', (e: TouchEvent) => {
         e.preventDefault();
@@ -143,7 +147,7 @@ export class FloatButton {
     );
   }
 
-  /** Snap button to nearest horizontal edge */
+  /** 根据当前位置与视口中线将按钮吸附到最近的水平边缘。 */
   private snapToEdge(): void {
     const x = this.el.offsetLeft;
     const midX = window.innerWidth / 2;

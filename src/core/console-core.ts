@@ -1,3 +1,6 @@
+/**
+ * 控制台日志采集核心：接管浏览器日志、全局异常和流式消息，并维护内存中的日志条目。
+ */
 import type { LogEntry, LogLevel, LogSource, ConsoleOptions } from '../types';
 import { EventEmitter } from '../utils/event-emitter';
 import { nextId } from '../utils/time';
@@ -14,18 +17,20 @@ const DEFAULT_OPTIONS: ConsoleOptions = {
   captureGlobalErrors: true,
 };
 
+/** 所有被接管的方法都在此白名单中，销毁时按同一列表精确恢复。 */
 const LOG_LEVELS: LogLevel[] = ['log', 'info', 'warn', 'error', 'debug'];
 
 /**
- * ConsoleCore hooks into window.console and captures log entries.
- * Supports AI streaming log buffering.
+   * 接管 window.console 并采集日志条目，同时支持 AI 流式日志的原地追加。
  */
 export class ConsoleCore extends EventEmitter<ConsoleEvents> {
   private entries: LogEntry[] = [];
   private options: ConsoleOptions;
+  /** 保存已绑定 this 的原始 console 方法，确保销毁后不遗留代理。 */
   private originals = new Map<LogLevel, (...args: unknown[]) => void>();
   private hooked = false;
   private globalErrorsBound = false;
+  /** 以业务流 ID 合并分块消息，避免每个 token 都成为单独的日志条目。 */
   private streamBuffers = new Map<string, LogEntry>();
   private flushTimer: ReturnType<typeof requestAnimationFrame> | null = null;
   private pendingStreamEntries = new Set<LogEntry>();
@@ -45,7 +50,7 @@ export class ConsoleCore extends EventEmitter<ConsoleEvents> {
         this.originals.set(level, original);
 
         console[level] = (...args: unknown[]) => {
-          // Call original first so dev tools still work
+          // 先调用原方法，保证浏览器 DevTools 的可观测性不因采集而改变。
           original(...args);
           this.addEntry(level, args);
         };
@@ -59,13 +64,13 @@ export class ConsoleCore extends EventEmitter<ConsoleEvents> {
     this.hooked = true;
   }
 
-  /** Add a log entry */
+  /** 规范化并写入日志条目，同时维持配置的内存上限。 */
   private addEntry(
     level: LogLevel,
     args: unknown[],
     options: { source?: LogSource; stack?: string } = {},
   ): void {
-    // Capture stack trace for error logs
+    // 若调用方没有提供栈，警告与错误在这里补充调用栈以便定位。
     let stack = options.stack;
     if (!stack && (level === 'error' || level === 'warn')) {
       const err = new Error();
@@ -83,7 +88,7 @@ export class ConsoleCore extends EventEmitter<ConsoleEvents> {
 
     this.entries.push(entry);
 
-    // Enforce max logs limit
+    // 从最旧记录开始淘汰，避免长时间运行的页面无限占用内存。
     if (this.entries.length > this.options.maxLogs) {
       this.entries.splice(0, this.entries.length - this.options.maxLogs);
     }
@@ -140,8 +145,7 @@ export class ConsoleCore extends EventEmitter<ConsoleEvents> {
   };
 
   /**
-   * Start or update a streaming log entry (for AI streaming responses).
-   * Call with the same streamId to update the entry in-place.
+   * 新建或更新 AI 流式日志；相同 streamId 始终原地追加到同一条记录。
    */
   appendStream(streamId: string, chunk: string): void {
     let entry = this.streamBuffers.get(streamId);
@@ -159,13 +163,13 @@ export class ConsoleCore extends EventEmitter<ConsoleEvents> {
       this.entries.push(entry);
       this.emit('entry', entry);
     } else {
-      // Append chunk to existing entry
+      // 同一流只更新首个参数，渲染层可据此稳定复用既有 DOM 行。
       entry.args = [(entry.args[0] as string) + chunk];
       this.scheduleStreamFlush(entry);
     }
   }
 
-  /** Mark a stream as complete */
+  /** 标记流式日志结束并通知视图移除“进行中”状态。 */
   endStream(streamId: string): void {
     const entry = this.streamBuffers.get(streamId);
     if (entry) {
@@ -175,7 +179,7 @@ export class ConsoleCore extends EventEmitter<ConsoleEvents> {
     }
   }
 
-  /** Schedule a batched UI update for stream entries (avoids UI freeze) */
+  /** 按动画帧批量发出流式更新，避免高频 token 导致主线程反复重排。 */
   private scheduleStreamFlush(entry: LogEntry): void {
     this.pendingStreamEntries.add(entry);
     if (this.flushTimer !== null) return;
@@ -188,7 +192,7 @@ export class ConsoleCore extends EventEmitter<ConsoleEvents> {
     });
   }
 
-  /** Clone arguments to avoid holding references to mutable objects */
+  /** 记录参数快照而非可变对象引用，保证历史日志不会随业务对象变化而失真。 */
   private cloneArgs(args: unknown[]): unknown[] {
     return args.map((arg) => {
       if (arg instanceof Error) {
@@ -223,7 +227,7 @@ export class ConsoleCore extends EventEmitter<ConsoleEvents> {
       if (typeof arg === 'function') {
         return `ƒ ${arg.name || 'anonymous'}()`;
       }
-      // For objects, store a snapshot
+      // 普通对象使用 JSON 快照；无法序列化时退回字符串，采集流程不能因此中断。
       if (typeof arg === 'object' && arg !== null) {
         try {
           return JSON.parse(JSON.stringify(arg));
@@ -235,12 +239,12 @@ export class ConsoleCore extends EventEmitter<ConsoleEvents> {
     });
   }
 
-  /** Get all log entries */
+  /** 返回当前采集的日志条目。 */
   getEntries(): LogEntry[] {
     return this.entries;
   }
 
-  /** Get entries filtered by level */
+  /** 按级别与关键词筛选日志，供控制台面板直接消费。 */
   getFilteredEntries(levels?: LogLevel[], search?: string): LogEntry[] {
     let result = this.entries;
     if (levels && levels.length > 0) {
@@ -255,19 +259,19 @@ export class ConsoleCore extends EventEmitter<ConsoleEvents> {
     return result;
   }
 
-  /** Clear all logs */
+  /** 清空普通与流式日志状态，并同步通知订阅者刷新。 */
   clear(): void {
     this.entries.length = 0;
     this.streamBuffers.clear();
     this.emit('clear');
   }
 
-  /** Export logs as JSON string */
+  /** 将当前日志导出为格式化 JSON。 */
   exportJSON(): string {
     return JSON.stringify(this.entries, null, 2);
   }
 
-  /** Restore original console methods */
+  /** 恢复所有原生监听与 console 方法，释放调试器运行期资源。 */
   destroy(): void {
     if (!this.hooked) return;
     this.unbindGlobalErrorListeners();

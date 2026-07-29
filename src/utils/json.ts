@@ -1,6 +1,9 @@
+/**
+ * JSON 展示工具：在防止循环引用和过深对象展开的前提下生成安全的高亮内容。
+ */
 import { escapeHTML } from './dom';
 
-/** Color map for JSON syntax highlighting */
+/** JSON 语法高亮的颜色映射，与主题文本颜色保持可读性。 */
 const JSON_COLORS = {
   key: '#9cdcfe',
   string: '#ce9178',
@@ -12,8 +15,7 @@ const JSON_COLORS = {
 };
 
 /**
- * Convert a value to a syntax-highlighted HTML string.
- * Handles circular references and deep nesting safely.
+ * 将任意值转为带语法高亮的 HTML，并限制循环引用、对象深度和对象键数量。
  */
 export function highlightJSON(value: unknown, maxDepth = 4): string {
   const seen = new WeakSet();
@@ -54,13 +56,13 @@ export function highlightJSON(value: unknown, maxDepth = 4): string {
         return span('bracket', '[') + items + span('bracket', ']');
       }
 
-      // Object
+      // 对象仅展示前 100 个键，避免日志中大型载荷阻塞面板渲染。
       const obj = val as Record<string, unknown>;
       const keys = Object.keys(obj);
       if (keys.length === 0) return span('bracket', '{}');
 
       const entries = keys
-        .slice(0, 100) // limit keys to prevent huge renders
+        .slice(0, 100)
         .map((k) => {
           const keyStr = span('key', `"${escapeHTML(k)}"`);
           const valStr = render(obj[k], depth + 1);
@@ -83,7 +85,7 @@ export function highlightJSON(value: unknown, maxDepth = 4): string {
 }
 
 /**
- * Try to parse a string as JSON, return parsed or original.
+ * 尝试解析 JSON 字符串；解析失败时保留原始文本，方便调用方原样展示。
  */
 export function tryParseJSON(str: string): unknown {
   try {
@@ -94,7 +96,7 @@ export function tryParseJSON(str: string): unknown {
 }
 
 /**
- * Stringify a value safely (handles circular refs).
+ * 安全序列化任意值，显式处理循环引用、BigInt、函数和 Error 等 JSON 不支持的类型。
  */
 export function safeStringify(value: unknown, space?: number): string {
   const seen = new WeakSet();

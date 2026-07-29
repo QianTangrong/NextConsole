@@ -1,3 +1,6 @@
+/**
+ * 插件扩展契约：限定插件能访问的核心能力及其面板的生命周期回调。
+ */
 import type { ConsoleCore } from '../core/console-core';
 import type { NetworkCore } from '../core/network-core';
 import type { StorageCore } from '../core/storage-core';

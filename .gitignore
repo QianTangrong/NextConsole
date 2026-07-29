@@ -1,6 +1,13 @@
+# 本地依赖、构建产物和发布临时文件不纳入版本控制。
 node_modules/
 dist/
 *.local
 .DS_Store
 *.tgz
 publish.sh
+videos/
+.git-recovery-backup-20260729-153030/
+.git-history-before-rewrite-20260729-153802/
+*.idx
+.git-history-rewrite-temp-0a5b6b5d863144b6af75f5a198d8ab7e/
+.git-history-before-date-spread-20260729-154550/

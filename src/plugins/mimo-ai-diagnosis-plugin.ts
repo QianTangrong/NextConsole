@@ -1,3 +1,6 @@
+/**
+ * 小米 AI 诊断插件：从已采集的错误、网络活动和脱敏运行上下文生成可控的诊断请求。
+ */
 import type {
   LogEntry,
   MimoAIDiagnosisOptions,
@@ -9,6 +12,7 @@ import type {
   PluginAPI,
 } from '../types';
 
+/** 诊断请求只使用下列容量预算，避免将完整页面数据或长期历史发送到外部服务。 */
 const MIMO_BASE_URL = 'https://token-plan-cn.xiaomimimo.com/v1';
 const MIMO_CHAT_URL = `${MIMO_BASE_URL}/chat/completions`;
 const MIMO_MODEL = 'mimo-v2.5-pro';
@@ -187,15 +191,18 @@ class DiagnosisRequestError extends Error {
   }
 }
 
+/** 识别可安全枚举的普通对象，供后续脱敏和响应解析复用。 */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** 先限定长度再进入诊断快照，保持请求大小可预测。 */
 function truncateText(value: string, maxLength: number): string {
   return value.length > maxLength ? `${value.slice(0, maxLength)}…(已截断)` : value;
 }
 
 /** 对字符串内常见凭据与查询参数做最后一道脱敏。 */
+/** 遮蔽文本中的常见凭据键值对、Bearer Token 和 JWT。 */
 function redactText(value: string): string {
   return truncateText(
     value
@@ -209,6 +216,9 @@ function redactText(value: string): string {
 
 /**
  * 控制台参数和业务扩展上下文默认不可信；此函数同时限制深度、集合大小与敏感字段。
+ */
+/**
+ * 将任意业务值转换为有限、可序列化且脱敏的快照；访问属性失败时不影响整次诊断。
  */
 function sanitizeValue(value: unknown, depth = 0, seen = new WeakSet<object>()): unknown {
   if (depth > 4) return '[深度已截断]';
@@ -264,6 +274,7 @@ function describeValue(value: unknown): string {
   }
 }
 
+/** 从日志条目抽取最小错误上下文，错误参数会再次经过脱敏和结构裁剪。 */
 function getErrorContext(entry: LogEntry): MimoDiagnosisErrorContext {
   const errorArg = entry.args.find((arg) => {
     if (!isRecord(arg)) return false;
@@ -292,6 +303,7 @@ function getErrorSourceLabel(source: MimoDiagnosisErrorContext['source']): strin
   return 'console.error';
 }
 
+/** 解析并清理 URL；查询参数不会被放入诊断上下文。 */
 function toSafeUrl(rawUrl: string, baseUrl = window.location.href): string {
   try {
     const url = new URL(rawUrl, baseUrl);
@@ -301,6 +313,7 @@ function toSafeUrl(rawUrl: string, baseUrl = window.location.href): string {
   }
 }
 
+/** 收集与问题定位相关的运行环境，不读取存储、请求体或用户输入正文。 */
 function getRuntimeContext(): Record<string, unknown> {
   const connection = (navigator as Navigator & {
     connection?: { effectiveType?: string; downlink?: number; rtt?: number; saveData?: boolean };
@@ -342,6 +355,7 @@ function getRuntimeContext(): Record<string, unknown> {
   };
 }
 
+/** 选取当前错误之前有限数量的日志，构成可审计的排障时间线。 */
 function createBreadcrumbs(entries: LogEntry[], selectedEntry: LogEntry): Array<Record<string, unknown>> {
   return entries
     .filter((entry) => entry.id !== selectedEntry.id && entry.timestamp <= selectedEntry.timestamp)
@@ -355,6 +369,7 @@ function createBreadcrumbs(entries: LogEntry[], selectedEntry: LogEntry): Array<
     }));
 }
 
+/** 仅保留错误附近的少量网络活动，避免无关请求淹没诊断证据。 */
 function createNetworkContext(entries: NetworkEntry[], errorTimestamp: number): Array<Record<string, unknown>> {
   const timeOrigin = performance.timeOrigin || Date.now() - performance.now();
   return entries
@@ -373,6 +388,7 @@ function createNetworkContext(entries: NetworkEntry[], errorTimestamp: number): 
     }));
 }
 
+/** 序列化快照后执行最终长度兜底，优先保留前部的错误与运行环境信息。 */
 function shrinkSnapshot(snapshot: DiagnosisSnapshot): string {
   let serialized = JSON.stringify(snapshot);
   if (serialized.length <= MAX_SNAPSHOT_CHARS) return serialized;
@@ -425,6 +441,7 @@ function stringList(value: unknown): string[] {
     : [];
 }
 
+/** 解析服务返回的 JSON 并逐字段验证，模型输出不满足契约时不直接渲染。 */
 function normalizeDiagnosis(content: string): MimoDiagnosisResult | undefined {
   const jsonText = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
   try {
@@ -484,6 +501,9 @@ function addTextElement(parent: HTMLElement, tag: keyof HTMLElementTagNameMap, c
   return element;
 }
 
+/**
+ * 创建按需启用的 AI 诊断插件。禁用时不注册面板、不采集额外数据，也不会发起网络请求。
+ */
 export function createMimoAIDiagnosisPlugin(options: MimoAIDiagnosisOptions = {}): NextConsolePlugin {
   let api: PluginAPI | undefined;
   let container: HTMLElement | undefined;

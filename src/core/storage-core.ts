@@ -1,3 +1,6 @@
+/**
+ * 浏览器存储核心：读取、修改和删除 localStorage、sessionStorage 与 Cookie 条目。
+ */
 import type { StorageEntry, StorageOptions, StorageType } from '../types';
 import { EventEmitter } from '../utils/event-emitter';
 
@@ -12,7 +15,7 @@ const DEFAULT_OPTIONS: StorageOptions = {
 };
 
 /**
- * StorageCore reads and manages localStorage, sessionStorage, and cookies.
+ * 读取和管理 localStorage、sessionStorage 与 Cookie；存储在读取时获取，避免全局拦截副作用。
  */
 export class StorageCore extends EventEmitter<StorageEvents> {
   private options: StorageOptions;
@@ -23,10 +26,10 @@ export class StorageCore extends EventEmitter<StorageEvents> {
   }
 
   init(): void {
-    // No hooks needed; we read storage on demand
+    // 存储按需读取即可，避免覆写宿主页面的 Storage API。
   }
 
-  /** Get all storage entries for visible storage types */
+  /** 按配置和关键词返回可见存储条目。 */
   getEntries(filter?: string): StorageEntry[] {
     const entries: StorageEntry[] = [];
 
@@ -43,6 +46,7 @@ export class StorageCore extends EventEmitter<StorageEvents> {
     return entries;
   }
 
+  /** 逐项读取 Web Storage；浏览器拒绝访问时返回已读取部分，不能中断面板。 */
   private readWebStorage(type: 'localStorage' | 'sessionStorage', filter?: string): StorageEntry[] {
     const entries: StorageEntry[] = [];
     try {
@@ -65,6 +69,7 @@ export class StorageCore extends EventEmitter<StorageEvents> {
     return entries;
   }
 
+  /** 将 document.cookie 解析为表格条目；HttpOnly Cookie 本身不可由页面脚本读取。 */
   private readCookies(filter?: string): StorageEntry[] {
     const entries: StorageEntry[] = [];
     const cookies = document.cookie;
@@ -96,7 +101,7 @@ export class StorageCore extends EventEmitter<StorageEvents> {
     return entries;
   }
 
-  /** Set a storage value */
+  /** 写入指定存储介质，并在成功后通知视图重新读取。 */
   setItem(type: StorageType, key: string, value: string, cookieOptions?: {
     domain?: string;
     path?: string;
@@ -130,7 +135,7 @@ export class StorageCore extends EventEmitter<StorageEvents> {
     return ok;
   }
 
-  /** Remove a storage item */
+  /** 删除单个存储条目；Cookie 通过设置过期时间实现删除。 */
   removeItem(type: StorageType, key: string): void {
     try {
       if (type === 'localStorage') {
@@ -150,7 +155,7 @@ export class StorageCore extends EventEmitter<StorageEvents> {
     this.emit('update');
   }
 
-  /** Clear all entries of a specific type */
+  /** 清空一种存储介质；Cookie 逐条过期以避免影响其他域。 */
   clearAll(type: StorageType): void {
     try {
       if (type === 'localStorage') {

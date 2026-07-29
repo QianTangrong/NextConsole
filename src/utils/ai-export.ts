@@ -1,6 +1,10 @@
+/**
+ * AI 排障导出工具：按容量上限组合错误、关联网络记录和脱敏 DOM 摘要为 Markdown。
+ */
 import type { LogEntry } from '../types/console';
 import type { NetworkEntry } from '../types/network';
 
+/** 导出容量预算：优先保留最新错误和关联请求，避免生成难以审核的超大上下文。 */
 const MAX_ERRORS = 20;
 const MAX_RELATED_NETWORK_ENTRIES = 12;
 const MAX_NETWORK_BODY_CHARS = 3_000;
@@ -36,6 +40,10 @@ const DEFAULT_SANITIZATION_OPTIONS: SanitizationOptions = {
  * 将当前错误、关联网络记录和 DOM 结构整理为可直接交给 AI 的 Markdown。
  * 所有在此处输出的数据都按不可信内容处理，并在导出前进行脱敏和长度限制。
  */
+/**
+ * 将当前错误、关联网络记录和脱敏 DOM 整理为 Markdown。
+ * 所有业务数据均视为不可信内容，并在输出前执行脱敏、截断和结构限制。
+ */
 export function createAIExport(logEntries: LogEntry[], networkEntries: NetworkEntry[]): string {
   const exportedAt = Date.now();
   const timeOrigin = getPerformanceTimeOrigin();
@@ -68,6 +76,7 @@ export function createAIExport(logEntries: LogEntry[], networkEntries: NetworkEn
       sections.push('');
     }
 
+    // 每个错误只关联时间窗口内的请求；失败请求会在后续单独纳入，避免遗漏关键信号。
     for (const [index, entry] of visibleErrors.entries()) {
       const related = getRelatedNetworkEntries(entry.timestamp, networkEntries, timeOrigin, exportedAt);
       related.forEach(({ entry: networkEntry }) => relatedNetwork.set(networkEntry.id, networkEntry));
@@ -101,6 +110,7 @@ export function createAIExport(logEntries: LogEntry[], networkEntries: NetworkEn
   return sections.join('\n');
 }
 
+/** 运行环境只保留排障必要的页面信息，URL 会在此路径中统一移除查询参数。 */
 function renderRuntime(exportedAt: number): string[] {
   const location = window.location;
   return [
@@ -113,6 +123,7 @@ function renderRuntime(exportedAt: number): string[] {
   ];
 }
 
+/** 将错误条目转换为稳定的 JSON 代码块，防止日志文本影响 Markdown 结构。 */
 function renderError(entry: LogEntry, index: number, related: RelatedNetworkEntry[]): string[] {
   const snapshot = {
     id: entry.id,
@@ -143,6 +154,7 @@ function renderError(entry: LogEntry, index: number, related: RelatedNetworkEntr
   return lines;
 }
 
+/** 输出单条关联请求的脱敏快照，响应正文受独立容量上限约束。 */
 function renderNetworkEntry(entry: NetworkEntry, timeOrigin: number): string[] {
   const startedAt = getNetworkStartTime(entry, timeOrigin);
   const finishedAt = entry.pending ? undefined : getNetworkEndTime(entry, timeOrigin, Date.now());
@@ -250,6 +262,7 @@ function describeValue(value: unknown): string {
   }
 }
 
+/** 根据常见敏感字段名遮蔽请求头，未知字段仍需按长度截断。 */
 function sanitizeHeaders(headers: Record<string, string>): Record<string, string> | undefined {
   const entries = Object.entries(headers);
   if (entries.length === 0) return undefined;
@@ -260,6 +273,9 @@ function sanitizeHeaders(headers: Record<string, string>): Record<string, string
   ]));
 }
 
+/**
+ * 递归清洗未知值：限制深度、集合规模与字符串长度，并通过 WeakSet 安全处理循环引用。
+ */
 function sanitizeValue(value: unknown, overrides: Partial<SanitizationOptions> = {}, depth = 0, seen = new WeakSet<object>()): unknown {
   const options = { ...DEFAULT_SANITIZATION_OPTIONS, ...overrides };
   if (depth > options.maxDepth) return '[Depth truncated]';
@@ -307,6 +323,9 @@ function sanitizeValue(value: unknown, overrides: Partial<SanitizationOptions> =
 }
 
 /** DOM 仅复制结构；表单和可编辑内容会被替换，调试面板自身也不会进入快照。 */
+/**
+ * 只克隆 DOM 结构；表单、可编辑内容、事件属性与调试器自身节点都不会进入导出快照。
+ */
 function createDOMSnapshot(): string {
   const root = document.documentElement.cloneNode(true) as HTMLElement;
   root.querySelectorAll('#nextconsole-host, script, style, link[rel="stylesheet"], noscript').forEach((element) => element.remove());
@@ -350,6 +369,7 @@ function createDOMSnapshot(): string {
   return truncateText(root.outerHTML, MAX_DOM_SNAPSHOT_CHARS);
 }
 
+/** 仅保留 http(s) 的 origin 与 pathname，查询参数和其他协议资源不会外发。 */
 function sanitizeUrl(rawUrl: string): string {
   try {
     const url = new URL(rawUrl, window.location.href);
@@ -387,6 +407,7 @@ function formatDuration(value: number): string {
   return `${Math.round(value)} ms`;
 }
 
+/** 根据内容中已有的反引号长度选择围栏，防止日志正文提前闭合 Markdown 代码块。 */
 function createCodeFence(content: string, language: string): string {
   const backtickRuns = content.match(/`+/g) ?? [];
   const longestRun = backtickRuns.reduce((longest, run) => Math.max(longest, run.length), 2);
