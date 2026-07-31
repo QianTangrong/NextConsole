@@ -13,10 +13,12 @@ import type {
 } from '../types';
 
 /** 诊断请求只使用下列容量预算，避免将完整页面数据或长期历史发送到外部服务。 */
-const MIMO_BASE_URL = 'https://token-plan-cn.xiaomimimo.com/v1';
-const MIMO_CHAT_URL = `${MIMO_BASE_URL}/chat/completions`;
+const MIMO_BASE_URL = 'https://ai-api.libsou.com';
+// NewAPI 使用 OpenAI 兼容接口，/v1 只是 API 基地址，实际对话请求需要追加 chat/completions。
+const MIMO_CHAT_URL = `${MIMO_BASE_URL}/v1/chat/completions`;
 const MIMO_MODEL = 'mimo-v2.5-pro';
-const MAX_COMPLETION_TOKENS = 1024;
+// 部分 NewAPI 路由会先返回 reasoning_content；保留足够额度，避免推理完成前截断最终 JSON。
+const MAX_COMPLETION_TOKENS = 4096;
 const MAX_RECENT_LOGS = 12;
 const MAX_NETWORK_ENTRIES = 10;
 const MAX_SNAPSHOT_CHARS = 28_000;
@@ -171,7 +173,8 @@ interface MimoDiagnosisResult {
 }
 
 interface MimoChatCompletion {
-  content: string;
+  content?: string;
+  reasoningContent?: string;
   finishReason?: string;
 }
 
@@ -425,12 +428,18 @@ function getResponseContent(payload: unknown): MimoChatCompletion {
   if (!isRecord(firstChoice) || !isRecord(firstChoice.message)) {
     throw new DiagnosisRequestError('模型服务未返回可用的诊断内容。');
   }
-  const content = firstChoice.message.content;
-  if (typeof content !== 'string' || !content.trim()) {
+  const rawContent = firstChoice.message.content;
+  const rawReasoningContent = firstChoice.message.reasoning_content;
+  const content = typeof rawContent === 'string' && rawContent.trim() ? rawContent.trim() : undefined;
+  const reasoningContent = typeof rawReasoningContent === 'string' && rawReasoningContent.trim()
+    ? rawReasoningContent.trim()
+    : undefined;
+  if (!content && !reasoningContent) {
     throw new DiagnosisRequestError('模型服务未返回可用的诊断内容。');
   }
   return {
-    content: content.trim(),
+    content,
+    reasoningContent,
     finishReason: typeof firstChoice.finish_reason === 'string' ? firstChoice.finish_reason : undefined,
   };
 }
@@ -627,7 +636,7 @@ export function createMimoAIDiagnosisPlugin(options: MimoAIDiagnosisOptions = {}
     if (!api) return;
     const apiKey = getApiKey();
     if (!apiKey) {
-      setStatus('请输入小米 API Key 后再分析。', 'error');
+      setStatus('请输入 NewAPI API Key 后再分析。', 'error');
       keyInput?.focus();
       return;
     }
@@ -656,7 +665,7 @@ export function createMimoAIDiagnosisPlugin(options: MimoAIDiagnosisOptions = {}
         const response = await window.fetch(MIMO_CHAT_URL, {
           method: 'POST',
           headers: {
-            'api-key': apiKey,
+            Authorization: `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -683,14 +692,19 @@ export function createMimoAIDiagnosisPlugin(options: MimoAIDiagnosisOptions = {}
         }
         completion = getResponseContent(await response.json());
         if (activeController !== controller) return;
-        diagnosis = normalizeDiagnosis(completion.content);
+        // reasoning_content 仅用于识别推理截断，不能作为诊断结果渲染，避免泄露模型思考过程。
+        diagnosis = completion.content ? normalizeDiagnosis(completion.content) : undefined;
         if (diagnosis) break;
       }
 
       if (!diagnosis) {
         const reason = completion?.finishReason === 'length'
-          ? '模型输出达到长度上限，'
-          : '模型没有返回完整 JSON，';
+          ? completion.reasoningContent && !completion.content
+            ? '模型推理内容耗尽了输出额度，未生成最终 JSON，'
+            : '模型输出达到长度上限，'
+          : completion?.reasoningContent && !completion.content
+            ? '模型只返回了推理内容，未返回最终 JSON，'
+            : '模型没有返回完整 JSON，';
         throw new DiagnosisRequestError(`${reason}已自动重试一次仍未成功，请再次点击分析。`);
       }
 
@@ -765,14 +779,14 @@ export function createMimoAIDiagnosisPlugin(options: MimoAIDiagnosisOptions = {}
 
     const settings = document.createElement('section');
     settings.className = 'nc-mimo-section';
-    addTextElement(settings, 'div', 'nc-mimo-section-title', '小米 AI 诊断');
+    addTextElement(settings, 'div', 'nc-mimo-section-title', 'NewAPI AI 诊断');
     const settingsBody = document.createElement('div');
     settingsBody.className = 'nc-mimo-section-body';
     addTextElement(settingsBody, 'div', 'nc-mimo-notice', '仅适用于开发调试。API Key 只保留在当前输入框中，刷新页面或销毁 NextConsole 后即消失。');
     const label = document.createElement('label');
     label.className = 'nc-mimo-key-label';
     label.htmlFor = 'nc-mimo-api-key';
-    label.textContent = '小米 API Key';
+    label.textContent = 'NewAPI API Key';
     settingsBody.appendChild(label);
     keyInput = document.createElement('input');
     keyInput.id = 'nc-mimo-api-key';
