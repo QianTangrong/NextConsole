@@ -72,14 +72,16 @@ NextConsole 比 vConsole **小 3.3 倍**，比 Eruda **小 6.4 倍**（gzip 後�
 
 ## 快速開始
 
-### CDN / UMD
+### CDN / 單一檔案
 
 ```html
-<script src="https://unpkg.com/@royalscome/nextconsole/dist/nextconsole.umd.js"></script>
+<script src="https://unpkg.com/@royalscome/nextconsole/dist/nextconsole.min.js"></script>
 <script>
   var nc = new NextConsole();
 </script>
 ```
+
+`nextconsole.min.js` 已包含全部執行期程式碼，不依賴額外分包或 source map。將這一個檔案上傳到 CDN 後，即可透過一般 `<script>` 標籤直接載入。
 
 ### ES 模組
 

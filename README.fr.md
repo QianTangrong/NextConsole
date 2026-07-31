@@ -72,14 +72,16 @@ NextConsole est **3,3x plus petit** que vConsole et **6,4x plus petit** que Erud
 
 ## Demarrage rapide
 
-### CDN / UMD
+### CDN / fichier unique
 
 ```html
-<script src="https://unpkg.com/@royalscome/nextconsole/dist/nextconsole.umd.js"></script>
+<script src="https://unpkg.com/@royalscome/nextconsole/dist/nextconsole.min.js"></script>
 <script>
   var nc = new NextConsole();
 </script>
 ```
+
+`nextconsole.min.js` contient tout le code d'execution et ne depend d'aucun chunk ni source map supplementaire. Uploadez ce seul fichier sur votre CDN, puis chargez-le avec une balise `<script>` classique.
 
 ### Module ES
 

@@ -72,14 +72,16 @@ NextConsole is **3.3x smaller** than vConsole and **6.4x smaller** than Eruda (g
 
 ## Quick Start
 
-### CDN / UMD
+### CDN / Single File
 
 ```html
-<script src="https://unpkg.com/@royalscome/nextconsole/dist/nextconsole.umd.js"></script>
+<script src="https://unpkg.com/@royalscome/nextconsole/dist/nextconsole.min.js"></script>
 <script>
   var nc = new NextConsole();
 </script>
 ```
+
+`nextconsole.min.js` contains all runtime code and has no additional chunk or source-map dependency. After uploading this one file to your CDN, it can be loaded with a classic `<script>` tag.
 
 ### ES Module
 
