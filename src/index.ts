@@ -38,7 +38,7 @@ let _instance: NextConsole | null = null;
  *
  * @example
  * ```js
- * import NextConsole from 'nextconsole';
+ * import NextConsole from 'nconsole';
  *
  * const nc = new NextConsole();
  * nc.show();

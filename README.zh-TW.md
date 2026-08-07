@@ -75,7 +75,7 @@ NextConsole 比 vConsole **小 3.3 倍**，比 Eruda **小 6.4 倍**（gzip 後�
 ### CDN / 單一檔案
 
 ```html
-<script src="https://unpkg.com/@royalscome/nextconsole/dist/nextconsole.min.js"></script>
+<script src="https://unpkg.com/nconsole/dist/nextconsole.min.js"></script>
 <script>
   var nc = new NextConsole();
 </script>
@@ -86,11 +86,11 @@ NextConsole 比 vConsole **小 3.3 倍**，比 Eruda **小 6.4 倍**（gzip 後�
 ### ES 模組
 
 ```bash
-npm install @royalscome/nextconsole
+npm install nconsole
 ```
 
 ```js
-import NextConsole from '@royalscome/nextconsole';
+import NextConsole from 'nconsole';
 
 const nc = new NextConsole({
   defaultTab: 'console',
@@ -188,7 +188,7 @@ NextConsole 內建兩個官方外掛：
 檢視頁面所有指令碼和樣式表（外部及行內），提供完整原始碼檢視器：
 
 ```js
-import NextConsole, { createSourcePlugin } from '@royalscome/nextconsole';
+import NextConsole, { createSourcePlugin } from 'nconsole';
 
 const nc = new NextConsole();
 nc.use(createSourcePlugin());
@@ -199,7 +199,7 @@ nc.use(createSourcePlugin());
 Core Web Vitals、資源明細、長任務偵測，以及自訂效能標記：
 
 ```js
-import NextConsole, { createPerformancePlugin } from '@royalscome/nextconsole';
+import NextConsole, { createPerformancePlugin } from 'nconsole';
 
 const nc = new NextConsole();
 nc.use(createPerformancePlugin());
@@ -281,6 +281,12 @@ npm run build
 
 # 型別檢查
 npm run typecheck
+
+# 執行自動化測試
+npm test
+
+# 一鍵執行測試、型別檢查與正式環境建置
+npm run verify
 ```
 
 測試伺服器提供：

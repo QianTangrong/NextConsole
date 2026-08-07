@@ -75,7 +75,7 @@ NextConsole est **3,3x plus petit** que vConsole et **6,4x plus petit** que Erud
 ### CDN / fichier unique
 
 ```html
-<script src="https://unpkg.com/@royalscome/nextconsole/dist/nextconsole.min.js"></script>
+<script src="https://unpkg.com/nconsole/dist/nextconsole.min.js"></script>
 <script>
   var nc = new NextConsole();
 </script>
@@ -86,11 +86,11 @@ NextConsole est **3,3x plus petit** que vConsole et **6,4x plus petit** que Erud
 ### Module ES
 
 ```bash
-npm install @royalscome/nextconsole
+npm install nconsole
 ```
 
 ```js
-import NextConsole from '@royalscome/nextconsole';
+import NextConsole from 'nconsole';
 
 const nc = new NextConsole({
   defaultTab: 'console',
@@ -188,7 +188,7 @@ NextConsole embarque deux plugins officiels :
 Affiche tous les scripts et feuilles de style de la page (externes et inline) avec un visualiseur de code source complet :
 
 ```js
-import NextConsole, { createSourcePlugin } from '@royalscome/nextconsole';
+import NextConsole, { createSourcePlugin } from 'nconsole';
 
 const nc = new NextConsole();
 nc.use(createSourcePlugin());
@@ -199,7 +199,7 @@ nc.use(createSourcePlugin());
 Core Web Vitals, repartition des ressources, detection des longues taches et marques de performance personnalisees :
 
 ```js
-import NextConsole, { createPerformancePlugin } from '@royalscome/nextconsole';
+import NextConsole, { createPerformancePlugin } from 'nconsole';
 
 const nc = new NextConsole();
 nc.use(createPerformancePlugin());
@@ -281,6 +281,12 @@ npm run build
 
 # Verification de types
 npm run typecheck
+
+# Executer les tests automatises
+npm test
+
+# Executer les tests, la verification des types et les builds de production
+npm run verify
 ```
 
 Le serveur de test fournit :
