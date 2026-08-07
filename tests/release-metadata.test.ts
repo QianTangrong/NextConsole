@@ -6,6 +6,9 @@ import { describe, expect, it } from 'vitest';
 type PackageManifest = {
   name: string;
   version: string;
+  exports: {
+    '.': Record<string, string>;
+  };
 };
 
 type PackageLock = PackageManifest & {
@@ -23,6 +26,10 @@ describe('release metadata', () => {
     expect(packageLock.version).toBe(packageManifest.version);
     expect(packageLock.packages['']?.name).toBe(packageManifest.name);
     expect(packageLock.packages['']?.version).toBe(packageManifest.version);
+  });
+
+  it('places the TypeScript condition before runtime conditions', () => {
+    expect(Object.keys(packageManifest.exports['.'])).toEqual(['types', 'import', 'require']);
   });
 
   it.each(readmeFiles)('uses the current package name in %s', (file) => {

@@ -5,5 +5,5 @@
     "rootDir": ".",
     "types": ["node", "vitest/globals"]
   },
-  "include": ["src", "tests", "vitest.config.ts"]
+  "include": ["src", "tests", "vite.config.mts", "vite.cdn.config.mts", "vitest.config.ts"]
 }

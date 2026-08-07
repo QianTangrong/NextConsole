@@ -1,5 +1,6 @@
 /**
- * Vite 库构建配置：以 src/index.ts 为入口，同时生成 ES、UMD 与 TypeScript 声明文件。
+ * Vite library build configuration: build ES and UMD bundles plus a rolled-up
+ * TypeScript declaration file from src/index.ts.
  */
 import { defineConfig } from 'vite';
 import { resolve, dirname } from 'path';
@@ -12,7 +13,9 @@ export default defineConfig({
   plugins: [
     dts({
       insertTypesEntry: true,
-      rollupTypes: true,
+      bundleTypes: {
+        bundledPackages: [],
+      },
     }),
   ],
   server: {
@@ -30,10 +33,9 @@ export default defineConfig({
       formats: ['es', 'umd'],
       fileName: (format) => `nextconsole.${format}.js`,
     },
-    minify: 'esbuild',
-    rollupOptions: {
+    rolldownOptions: {
       output: {
-        inlineDynamicImports: true,
+        codeSplitting: false,
         exports: 'named',
       },
     },
