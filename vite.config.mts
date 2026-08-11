@@ -30,9 +30,9 @@ export default defineConfig({
     copyPublicDir: false,
     lib: {
       entry: resolve(__dirname, 'src/index.ts'),
-      name: 'NextConsole',
+      name: 'Nconsole',
       formats: ['es', 'umd'],
-      fileName: (format) => `nextconsole.${format}.js`,
+      fileName: (format) => `nconsole.${format}.js`,
     },
     rolldownOptions: {
       output: {

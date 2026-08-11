@@ -9,8 +9,8 @@ import type { StorageOptions } from './storage';
 /** Tab panel types */
 export type PanelTab = 'console' | 'network' | 'storage' | 'element' | 'system' | 'repl';
 
-/** NextConsole configuration */
-export interface NextConsoleCoreConfig {
+/** Nconsole configuration */
+export interface NconsoleCoreConfig {
   /** Target element to mount to (default: document.body) */
   target?: HTMLElement;
   /** Default active tab */
@@ -28,23 +28,23 @@ export interface NextConsoleCoreConfig {
   /** Storage panel options */
   storage?: Partial<StorageOptions>;
   /** 小米 AI 错误诊断。默认关闭，开启后仅在用户手动点击分析时发送脱敏快照。 */
-  /** Callback when NextConsole is ready */
+  /** Callback when Nconsole is ready */
   onReady?: () => void;
 }
 
-/** Event types emitted by NextConsole */
+/** Event types emitted by Nconsole */
 /**
- * Backward-compatible configuration exposed by the full package entry.
+ * Configuration exposed by the full package entry.
  * The `mimoDiagnosis` convenience option is intentionally excluded from Lite.
  */
-export interface NextConsoleConfig extends NextConsoleCoreConfig {
+export interface NconsoleConfig extends NconsoleCoreConfig {
   mimoDiagnosis?: MimoAIDiagnosisOptions;
 }
 
 /** Configuration accepted by the Lite UI entry. */
-export type NextConsoleLiteConfig = NextConsoleCoreConfig;
+export type NconsoleLiteConfig = NconsoleCoreConfig;
 
-export interface NextConsoleEvents {
+export interface NconsoleEvents {
   log: (entry: import('./console').LogEntry) => void;
   network: (entry: import('./network').NetworkEntry) => void;
   show: () => void;
@@ -56,7 +56,7 @@ export type { LogLevel, LogSource, LogEntry, ConsoleOptions } from './console';
 export type { HttpMethod, RequestType, NetworkEntry, SSEEvent, StreamMessage, NetworkOptions } from './network';
 export type { StorageType, StorageEntry, StorageOptions } from './storage';
 export type { SystemInfo, PerformanceMetrics } from './system';
-export type { NextConsolePlugin, PluginAPI, PluginTab } from './plugin';
+export type { NconsolePlugin, PluginAPI, PluginTab } from './plugin';
 export type {
   MimoAIDiagnosisOptions,
   MimoDiagnosisContext,

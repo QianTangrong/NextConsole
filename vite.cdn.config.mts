@@ -12,9 +12,9 @@ export default defineConfig({
     emptyOutDir: false,
     lib: {
       entry: resolve(__dirname, 'src/cdn.ts'),
-      name: 'NextConsole',
+      name: 'Nconsole',
       formats: ['iife'],
-      fileName: () => 'nextconsole.min.js',
+      fileName: () => 'nconsole.min.js',
     },
     sourcemap: false,
     target: 'es2020',

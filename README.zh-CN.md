@@ -1,4 +1,4 @@
-# NextConsole
+# Nconsole
 
 > 新一代前端调试控制台。vConsole 的现代替代品，支持 AI 流式日志、REPL 命令执行、插件系统，专为移动端 H5 和现代 Web 优化。
 
@@ -27,16 +27,16 @@
 
 | 工具 | 压缩后 | Gzip | 依赖数 |
 | --- | --- | --- | --- |
-| **NextConsole** | **99 KB** | **23 KB** | **0** |
+| **Nconsole** | **99 KB** | **23 KB** | **0** |
 | vConsole 3.15 | 277 KB | 76 KB | 4 |
 | Eruda 3.4 | 485 KB | 147 KB | 0（内置打包） |
 | Chii 1.15 | N/A（服务端） | N/A | 9 |
 
-NextConsole 比 vConsole 小 **3.3 倍**，比 Eruda 小 **6.4 倍**（gzip 后）。
+Nconsole 比 vConsole 小 **3.3 倍**，比 Eruda 小 **6.4 倍**（gzip 后）。
 
 ### 功能对比
 
-| 功能 | NextConsole | vConsole | Eruda | Chii |
+| 功能 | Nconsole | vConsole | Eruda | Chii |
 | --- | :---: | :---: | :---: | :---: |
 | Console 日志 | ✅ | ✅ | ✅ | ✅ |
 | AI 流式日志 | ✅ | ❌ | ❌ | ❌ |
@@ -61,7 +61,7 @@ NextConsole 比 vConsole 小 **3.3 倍**，比 Eruda 小 **6.4 倍**（gzip 后�
 
 ### 架构对比
 
-| 方面 | NextConsole | vConsole | Eruda | Chii |
+| 方面 | Nconsole | vConsole | Eruda | Chii |
 | --- | --- | --- | --- | --- |
 | 渲染方式 | Shadow DOM | `<div>` 插入 body | `<div>` 插入 body | Chrome DevTools |
 | CSS 隔离 | 完全隔离 (Shadow DOM) | 类名作用域 | 类名作用域 | iframe |
@@ -75,13 +75,13 @@ NextConsole 比 vConsole 小 **3.3 倍**，比 Eruda 小 **6.4 倍**（gzip 后�
 ### CDN / 单文件
 
 ```html
-<script src="https://unpkg.com/nconsole/dist/nextconsole.min.js"></script>
+<script src="https://unpkg.com/nconsole/dist/nconsole.min.js"></script>
 <script>
-  var nc = new NextConsole();
+  var nc = new Nconsole();
 </script>
 ```
 
-`nextconsole.min.js` 已包含全部运行时代码，不依赖额外分包或 source map。将这一个文件上传到 CDN 后，即可通过普通 `<script>` 标签直接加载。
+`nconsole.min.js` 已包含全部运行时代码，不依赖额外分包或 source map。将这一个文件上传到 CDN 后，即可通过普通 `<script>` 标签直接加载。
 
 ### ES Module
 
@@ -90,9 +90,9 @@ npm install nconsole
 ```
 
 ```js
-import NextConsole from 'nconsole';
+import Nconsole from 'nconsole';
 
-const nc = new NextConsole({
+const nc = new Nconsole({
   defaultTab: 'console',
   panelHeight: 0.4,
   theme: 'light', // 'dark'（默认）或 'light'
@@ -108,12 +108,16 @@ nc.setTheme('light');
 nc.toggle();
 ```
 
+## 版本 2 迁移
+
+版本 2 包含破坏性的公开名称变更：构造函数和导入标识统一为 `Nconsole`；公开类型统一为 `NconsoleConfig`、`NconsoleCoreConfig`、`NconsoleLiteConfig` 和 `NconsolePlugin`；经典脚本文件统一为 `nconsole*.js`；自定义 DOM 选择器改为 `#nconsole-host`。npm 包名及子路径继续使用小写 `nconsole`。
+
 ## AI 流式日志
 
-NextConsole 原生支持 AI/LLM 流式输出：
+Nconsole 原生支持 AI/LLM 流式输出：
 
 ```js
-const nc = new NextConsole();
+const nc = new Nconsole();
 
 // 开始流式输出 — 分块实时追加
 nc.appendStream('chat-1', '你好');
@@ -131,7 +135,7 @@ nc.endStream('chat-1');
 默认关闭。启用后会新增“AI 诊断”标签页，开发者在该页临时输入小米 API Key，再对某一条 `console.error`、未处理的运行时异常或未处理 Promise 拒绝手动发起诊断。Key 只保留在输入框内，不会写入配置、Storage 或日志；刷新页面或销毁实例后失效。
 
 ```ts
-const nc = new NextConsole({
+const nc = new Nconsole({
   mimoDiagnosis: {
     enabled: true,
     contextProvider: () => ({
@@ -149,10 +153,10 @@ const nc = new NextConsole({
 
 ## 插件系统
 
-通过插件扩展 NextConsole 的功能：
+通过插件扩展 Nconsole 的功能：
 
 ```js
-const nc = new NextConsole();
+const nc = new Nconsole();
 
 nc.use({
   name: 'my-plugin',
@@ -186,14 +190,14 @@ nc.use(pluginA).use(pluginB).use(pluginC);
 | `api.networkCore` | 访问 Network 核心模块 |
 | `api.storageCore` | 访问 Storage 核心模块 |
 | `api.addStyle(css)` | 向 Shadow DOM 注入自定义 CSS |
-| `api.log(...args)` | 通过 console 打印日志（会被 NextConsole 捕获） |
+| `api.log(...args)` | 通过 console 打印日志（会被 Nconsole 捕获） |
 | `api.show()` | 显示面板 |
 | `api.hide()` | 隐藏面板 |
 
 ### 插件接口定义
 
 ```ts
-interface NextConsolePlugin {
+interface NconsolePlugin {
   name: string;           // 插件唯一标识（同名插件自动去重）
   version?: string;       // 插件版本号
   tab?: {                 // 可选：自定义面板标签
@@ -208,16 +212,16 @@ interface NextConsolePlugin {
 
 ### 内置插件
 
-NextConsole 附带两个官方插件：
+Nconsole 附带两个官方插件：
 
 #### Source 插件
 
 查看页面所有脚本和样式表（外部引用 & 内联），支持完整源码查看：
 
 ```js
-import NextConsole, { createSourcePlugin } from 'nconsole';
+import Nconsole, { createSourcePlugin } from 'nconsole';
 
-const nc = new NextConsole();
+const nc = new Nconsole();
 nc.use(createSourcePlugin());
 ```
 
@@ -226,16 +230,16 @@ nc.use(createSourcePlugin());
 核心性能指标（Web Vitals）、资源分布、长任务检测、自定义性能标记：
 
 ```js
-import NextConsole, { createPerformancePlugin } from 'nconsole';
+import Nconsole, { createPerformancePlugin } from 'nconsole';
 
-const nc = new NextConsole();
+const nc = new Nconsole();
 nc.use(createPerformancePlugin());
 ```
 
 ## 配置项
 
 ```ts
-interface NextConsoleConfig {
+interface NconsoleConfig {
   /** 挂载目标元素（默认：document.body） */
   target?: HTMLElement;
   /** 默认激活的面板标签 */
@@ -266,7 +270,7 @@ interface NextConsoleConfig {
     showSessionStorage?: boolean;  // 默认：true
     showCookies?: boolean;         // 默认：true
   };
-  /** NextConsole 初始化完成回调 */
+  /** Nconsole 初始化完成回调 */
   onReady?: () => void;
 }
 ```

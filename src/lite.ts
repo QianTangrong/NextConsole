@@ -3,11 +3,11 @@
  * plugin code. Import optional features from `nconsole/plugins/*` and call
  * `console.use(plugin)` when they are needed.
  */
-export { NextConsole as default, NextConsole } from './runtime/next-console';
+export { Nconsole as default, Nconsole } from './runtime/nconsole';
 export type {
-  NextConsoleCoreConfig,
-  NextConsoleLiteConfig,
-  NextConsoleLiteConfig as NextConsoleConfig,
+  NconsoleCoreConfig,
+  NconsoleLiteConfig,
+  NconsoleLiteConfig as NconsoleConfig,
   PanelTab,
   LogLevel,
   LogEntry,
@@ -23,7 +23,7 @@ export type {
   SSEEvent,
   SystemInfo,
   PerformanceMetrics,
-  NextConsolePlugin,
+  NconsolePlugin,
   PluginAPI,
   PluginTab,
 } from './types';

@@ -15,7 +15,7 @@ export interface PluginAPI {
   storageCore: StorageCore;
   /** Inject custom CSS into the Shadow DOM */
   addStyle(css: string): void;
-  /** Log messages through NextConsole's console */
+  /** Log messages through Nconsole's console */
   log(...args: unknown[]): void;
   /** Show the panel */
   show(): void;
@@ -34,7 +34,7 @@ export interface PluginTab {
 }
 
 /** Plugin definition */
-export interface NextConsolePlugin {
+export interface NconsolePlugin {
   /** Unique plugin name (used as tab key and for deduplication) */
   name: string;
   /** Plugin version string */
@@ -43,6 +43,6 @@ export interface NextConsolePlugin {
   tab?: PluginTab;
   /** Called when the plugin is installed; receives the plugin API */
   init?(api: PluginAPI): void;
-  /** Called when NextConsole is destroyed */
+  /** Called when Nconsole is destroyed */
   destroy?(): void;
 }

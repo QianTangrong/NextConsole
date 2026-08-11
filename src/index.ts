@@ -1,13 +1,13 @@
 /**
- * Full compatibility entry. It retains the convenience Mimo configuration and
+ * Full package entry. It retains the convenience Mimo configuration and
  * plugin factory re-exports. New integrations should prefer `nconsole/lite`,
  * `nconsole/core`, and `nconsole/plugins/*` to import only what they use.
  */
-import type { NextConsoleConfig } from './types';
+import type { NconsoleConfig } from './types';
 import { createMimoAIDiagnosisPlugin } from './plugins/mimo-ai-diagnosis-plugin';
-import { NextConsole as LiteNextConsole } from './runtime/next-console';
+import { Nconsole as LiteNconsole } from './runtime/nconsole';
 
-export type { NextConsoleConfig, PanelTab, LogLevel, LogEntry, NetworkEntry, NextConsolePlugin } from './types';
+export type { NconsoleConfig, PanelTab, LogLevel, LogEntry, NetworkEntry, NconsolePlugin } from './types';
 export type {
   ConsoleOptions,
   LogSource,
@@ -34,11 +34,11 @@ export { createPerformancePlugin } from './plugins/performance-plugin';
 export { createMimoAIDiagnosisPlugin } from './plugins/mimo-ai-diagnosis-plugin';
 
 /**
- * Full NextConsole runtime. This preserves the existing `mimoDiagnosis`
+ * Full Nconsole runtime. This preserves the existing `mimoDiagnosis`
  * convenience option while delegating the plugin-free UI to the Lite runtime.
  */
-export class NextConsole extends LiteNextConsole {
-  constructor(config: NextConsoleConfig = {}) {
+export class Nconsole extends LiteNconsole {
+  constructor(config: NconsoleConfig = {}) {
     const { mimoDiagnosis, ...coreConfig } = config;
     const initialPlugins = mimoDiagnosis?.enabled
       ? [createMimoAIDiagnosisPlugin(mimoDiagnosis)]
@@ -48,4 +48,4 @@ export class NextConsole extends LiteNextConsole {
   }
 }
 
-export default NextConsole;
+export default Nconsole;

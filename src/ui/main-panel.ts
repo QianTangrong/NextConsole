@@ -1,7 +1,7 @@
 /**
  * 调试器主容器：创建 Shadow DOM，协调各核心模块、内置面板、插件和整体生命周期。
  */
-import type { PanelTab, NextConsoleCoreConfig, NextConsolePlugin, PluginAPI } from '../types';
+import type { PanelTab, NconsoleCoreConfig, NconsolePlugin, PluginAPI } from '../types';
 import { ConsoleCore } from '../core/console-core';
 import { NetworkCore } from '../core/network-core';
 import { StorageCore } from '../core/storage-core';
@@ -59,22 +59,22 @@ export class MainPanel {
   private replPanel?: ReplPanel;
 
   // Plugins
-  private plugins: NextConsolePlugin[] = [];
+  private plugins: NconsolePlugin[] = [];
   private pluginTabs: { key: string; label: string }[] = [];
   private pluginPanelsRendered = new Set<string>();
   private pluginAPI?: PluginAPI;
   private initialized = false;
 
   // Config
-  private config: NextConsoleCoreConfig;
+  private config: NconsoleCoreConfig;
 
-  constructor(config: NextConsoleCoreConfig = {}) {
+  constructor(config: NconsoleCoreConfig = {}) {
     this.config = config;
     this.activeTab = config.defaultTab || 'console';
 
     // Create isolated host element with Shadow DOM
     this.host = document.createElement('div');
-    this.host.id = 'nextconsole-host';
+    this.host.id = 'nconsole-host';
     this.shadow = this.host.attachShadow({ mode: 'closed' });
 
     // Core modules
@@ -172,7 +172,7 @@ export class MainPanel {
     closeBtn.className = 'nc-close-btn';
     closeBtn.textContent = '✕';
     closeBtn.title = 'Close';
-    closeBtn.setAttribute('aria-label', 'Close NextConsole');
+    closeBtn.setAttribute('aria-label', 'Close Nconsole');
     closeBtn.addEventListener('click', () => this.hide());
     tabBar.appendChild(closeBtn);
 
@@ -412,7 +412,7 @@ export class MainPanel {
     }
   }
 
-  /** 运行时切换主题，主题类只应用于 NextConsole 根节点。 */
+  /** 运行时切换主题，主题类只应用于 Nconsole 根节点。 */
   setTheme(theme: 'dark' | 'light'): void {
     this.applyTheme(theme);
   }
@@ -426,7 +426,7 @@ export class MainPanel {
   }
 
   /** 注册插件；同名插件仅保留首次注册的实例，避免重复钩子和标签。 */
-  use(plugin: NextConsolePlugin): void {
+  use(plugin: NconsolePlugin): void {
     // 名称既是插件身份也是标签键，重复安装会造成生命周期难以对称清理。
     if (this.plugins.some((p) => p.name === plugin.name)) return;
     this.plugins.push(plugin);
@@ -449,7 +449,7 @@ export class MainPanel {
           this.shadow.appendChild(style);
         },
         log: (...args: unknown[]) => {
-          console.log('[NextConsole Plugin]', ...args);
+          console.log('[Nconsole Plugin]', ...args);
         },
         show: () => this.show(),
         hide: () => this.hide(),
@@ -458,7 +458,7 @@ export class MainPanel {
     return this.pluginAPI;
   }
 
-  private initPlugin(plugin: NextConsolePlugin): void {
+  private initPlugin(plugin: NconsolePlugin): void {
     const api = this.getPluginAPI();
 
     // Add tab if plugin defines one
@@ -488,20 +488,20 @@ export class MainPanel {
     plugin.init?.(api);
   }
 
-  private destroyPlugin(plugin: NextConsolePlugin): void {
+  private destroyPlugin(plugin: NconsolePlugin): void {
     const tabKey = `plugin-${plugin.name}`;
     if (plugin.tab && this.pluginPanelsRendered.has(tabKey)) {
       try {
         plugin.tab.destroy?.();
       } catch (err) {
-        console.error('[NextConsole Plugin] tab destroy failed', plugin.name, err);
+        console.error('[Nconsole Plugin] tab destroy failed', plugin.name, err);
       }
     }
 
     try {
       plugin.destroy?.();
     } catch (err) {
-      console.error('[NextConsole Plugin] destroy failed', plugin.name, err);
+      console.error('[Nconsole Plugin] destroy failed', plugin.name, err);
     }
   }
 

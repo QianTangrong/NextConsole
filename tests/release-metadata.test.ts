@@ -6,6 +6,9 @@ import { describe, expect, it } from 'vitest';
 type PackageManifest = {
   name: string;
   version: string;
+  main: string;
+  module: string;
+  types: string;
   files: string[];
   exports: Record<string, Record<string, string>>;
 };
@@ -39,6 +42,18 @@ describe('release metadata', () => {
     expect(Object.keys(packageManifest.exports['.'])).toEqual(['types', 'import', 'require']);
   });
 
+  it('publishes the Nconsole 2.x artifact and public-constructor contract', () => {
+    expect(Number(packageManifest.version.split('.')[0])).toBeGreaterThanOrEqual(2);
+    expect(packageManifest.main).toBe('dist/nconsole.umd.js');
+    expect(packageManifest.module).toBe('dist/nconsole.es.js');
+    expect(packageManifest.types).toBe('dist/index.d.ts');
+
+    const rootEntry = readFileSync(resolve(root, 'src/index.ts'), 'utf8');
+    expect(rootEntry).toContain('export class Nconsole');
+    expect(rootEntry).toContain('export default Nconsole');
+    expect(rootEntry).not.toContain('NextConsole');
+  });
+
   it('exposes Lite, Core, and optional plugin subpaths with declarations', () => {
     expect(Object.keys(packageManifest.exports)).toEqual(expectedEntries);
 
@@ -63,7 +78,10 @@ describe('release metadata', () => {
     expect(readme).toContain(`npm install ${packageManifest.name}`);
     expect(readme).toContain(`from '${packageManifest.name}'`);
     expect(readme).toContain(`unpkg.com/${packageManifest.name}/`);
-    expect(readme).not.toContain('@royalscome/nextconsole');
+    expect(readme).toContain('Nconsole');
+    expect(readme).not.toContain('NextConsole');
+    expect(readme).not.toContain('nextconsole');
+    expect(readme).not.toContain('@royalscome/nconsole');
   });
 
   it('does not publish a prefilled provider credential', () => {

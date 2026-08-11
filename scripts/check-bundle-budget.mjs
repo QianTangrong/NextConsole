@@ -27,8 +27,8 @@ for (const [file, limits] of Object.entries(budget.files)) {
   }
 }
 
-assertSmaller('lite.js', 'nextconsole.es.js');
-assertSmaller('nextconsole.lite.min.js', 'nextconsole.min.js');
+assertSmaller('lite.js', 'nconsole.es.js');
+assertSmaller('nconsole.lite.min.js', 'nconsole.min.js');
 assertSmaller('core.js', 'lite.js');
 
 if (failures.length > 0) {

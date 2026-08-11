@@ -108,7 +108,7 @@ export class ConsolePanel {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `nextconsole-logs-${Date.now()}.json`;
+      a.download = `nconsole-logs-${Date.now()}.json`;
       a.click();
       URL.revokeObjectURL(url);
     });

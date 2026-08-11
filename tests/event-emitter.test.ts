@@ -32,7 +32,7 @@ describe('EventEmitter', () => {
     emitter.on('value', healthyListener);
     emitter.emit('value', 7);
 
-    expect(report).toHaveBeenCalledWith('[NextConsole] event listener error', error);
+    expect(report).toHaveBeenCalledWith('[Nconsole] event listener error', error);
     expect(healthyListener).toHaveBeenCalledWith(7);
   });
 });

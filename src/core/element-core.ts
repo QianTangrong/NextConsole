@@ -116,7 +116,7 @@ export class ElementCore {
   highlight(selector: string): void {
     if (!this.highlightOverlay) return;
     try {
-      // Skip NextConsole's own elements
+      // Skip Nconsole's own elements
       const el = document.querySelector(selector);
       if (!el) {
         this.clearHighlight();

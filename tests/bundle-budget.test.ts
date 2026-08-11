@@ -15,11 +15,11 @@ const budget = JSON.parse(
 describe('bundle budget configuration', () => {
   it('covers every public JavaScript artifact', () => {
     expect(Object.keys(budget.files)).toEqual([
-      'nextconsole.es.js',
-      'nextconsole.umd.js',
-      'nextconsole.min.js',
+      'nconsole.es.js',
+      'nconsole.umd.js',
+      'nconsole.min.js',
       'lite.js',
-      'nextconsole.lite.min.js',
+      'nconsole.lite.min.js',
       'core.js',
       'plugins/source.js',
       'plugins/performance.js',

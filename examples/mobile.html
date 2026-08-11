@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <title>NextConsole 移动端演示</title>
+  <title>Nconsole 移动端演示</title>
   <style>
     :root {
       --safe-top: env(safe-area-inset-top, 0px);
@@ -190,7 +190,7 @@
 
   <div class="header">
     <h1>🤖 AI Chat Demo</h1>
-    <p>NextConsole 移动端调试演示 · 点击右下 NC 按钮</p>
+    <p>Nconsole 移动端调试演示 · 点击右下 NC 按钮</p>
   </div>
 
   <div class="status-bar">
@@ -232,11 +232,11 @@
 
   <script type="module">
     // 移动端示例复用源码入口，并额外加载资源与性能插件验证插件标签的窄屏表现。
-    import NextConsole from '../src/index.ts';
+    import Nconsole from '../src/index.ts';
     import { createSourcePlugin } from '../src/plugins/source-plugin.ts';
     import { createPerformancePlugin } from '../src/plugins/performance-plugin.ts';
 
-    const nc = new NextConsole({
+    const nc = new Nconsole({
       defaultTab: 'console',
       panelHeight: 0.45,
       buttonPosition: { x: window.innerWidth - 64, y: window.innerHeight - 160 },
@@ -283,15 +283,15 @@
 
     // ========== AI 流式回复 ==========
     const AI_RESPONSES = [
-      '你好！我是 AI 助手，很高兴为你服务。这段文字是通过流式输出实时渲染的，你可以在 NextConsole 的 Console 面板中看到对应的流式日志条目（左侧有蓝色边框标记）。',
-      '移动端调试一直是前端开发的痛点。NextConsole 针对触屏交互进行了优化：浮动按钮支持拖拽和边缘吸附，面板支持手势调整高度，虚拟列表确保万级日志下依然流畅。',
+      '你好！我是 AI 助手，很高兴为你服务。这段文字是通过流式输出实时渲染的，你可以在 Nconsole 的 Console 面板中看到对应的流式日志条目（左侧有蓝色边框标记）。',
+      '移动端调试一直是前端开发的痛点。Nconsole 针对触屏交互进行了优化：浮动按钮支持拖拽和边缘吸附，面板支持手势调整高度，虚拟列表确保万级日志下依然流畅。',
       '关于 AI 流式输出的技术实现：我们使用 requestAnimationFrame 批量合并 DOM 更新，避免了高频率 token 推送导致的 UI 卡顿。同时 appendStream API 支持按 streamId 将多个 chunk 合并为同一条日志。',
       '你可以试试下面的快捷按钮：\n• 🌐 网络请求 — 查看 fetch/XHR 拦截\n• ❌ 模拟报错 — 测试错误捕获和堆栈\n• 💾 写入存储 — 查看 Storage 面板\n• ⚡ 压力测试 — 1000 条日志压测',
-      '代码质量方面，NextConsole 使用 Shadow DOM 实现完全隔离，不会污染宿主页面的样式和 DOM。销毁时会恢复所有被拦截的原生 API（console、fetch、XHR、EventSource）。',
+      '代码质量方面，Nconsole 使用 Shadow DOM 实现完全隔离，不会污染宿主页面的样式和 DOM。销毁时会恢复所有被拦截的原生 API（console、fetch、XHR、EventSource）。',
     ];
 
     /**
-     * 模拟逐字符 AI 输出：页面气泡和 NextConsole 共享 streamId，便于对照两端更新节奏。
+     * 模拟逐字符 AI 输出：页面气泡和 Nconsole 共享 streamId，便于对照两端更新节奏。
      */
     async function streamReply(text) {
       const bubble = addAIBubble();
@@ -372,7 +372,7 @@
             await fetch('https://jsonplaceholder.typicode.com/posts', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ title: '测试', body: 'NextConsole POST 测试', userId: 1 }),
+              body: JSON.stringify({ title: '测试', body: 'Nconsole POST 测试', userId: 1 }),
             });
             console.log('📤 POST /posts 完成');
             updateLogCount();
@@ -540,7 +540,7 @@
               const testMsgs = [
                 JSON.stringify({ action: 'ping' }),
                 JSON.stringify({ action: 'get_users' }),
-                'Hello NextConsole!',
+                'Hello Nconsole!',
                 '测试中文消息',
               ];
               testMsgs.forEach((msg, i) => {
@@ -736,7 +736,7 @@
 
           // Pre-populate some global test vars
           window.__replTestData = {
-            name: 'NextConsole REPL 测试',
+            name: 'Nconsole REPL 测试',
             items: [1, 2, 3, { nested: true }],
             fn: function hello() { return 'Hello from REPL!'; }
           };
@@ -838,7 +838,7 @@
       });
       updateLogCount();
 
-      await streamReply('欢迎来到 NextConsole 移动端演示！👋\n\n试试输入消息或点击下方快捷按钮。我会以流式方式回复，所有交互日志都会被捕获到调试面板中。');
+      await streamReply('欢迎来到 Nconsole 移动端演示！👋\n\n试试输入消息或点击下方快捷按钮。我会以流式方式回复，所有交互日志都会被捕获到调试面板中。');
     })();
   </script>
 </body>

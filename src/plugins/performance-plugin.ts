@@ -1,7 +1,7 @@
 /**
  * 性能插件：聚合浏览器性能指标和资源加载数据，提供面向排障的性能面板。
  */
-import type { NextConsolePlugin, PluginAPI } from '../types/plugin';
+import type { NconsolePlugin, PluginAPI } from '../types/plugin';
 import { escapeHTML } from '../utils/dom';
 
 interface PerfMetric {
@@ -283,7 +283,7 @@ function collectLongTasks(): { startTime: number; duration: number }[] {
 }
 
 /** 创建性能插件，并在可用时订阅长任务以补充资源时间线无法覆盖的卡顿。 */
-export function createPerformancePlugin(): NextConsolePlugin {
+export function createPerformancePlugin(): NconsolePlugin {
   let container: HTMLElement;
   let longTaskObserver: PerformanceObserver | null = null;
   let longTasks: { startTime: number; duration: number }[] = [];

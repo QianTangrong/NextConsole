@@ -1,11 +1,11 @@
-# NextConsole 优化方案
+# Nconsole 优化方案
 
 生成时间：2026-06-18  
 依据：`PROJECT_REPORT.md`、`package.json`、`vite.config.ts`、`tsconfig.json`、`npm outdated`、`npm audit`
 
 ## 1. 优化目标
 
-本方案面向 NextConsole 的可维护性、可靠性、安全性和发布质量优化，不直接改变产品定位。优化目标分为四类：
+本方案面向 Nconsole 的可维护性、可靠性、安全性和发布质量优化，不直接改变产品定位。优化目标分为四类：
 
 | 目标 | 衡量标准 |
 | --- | --- |
@@ -47,8 +47,8 @@
 
 3. 统一仓库元数据。
    - 核对 `package.json.repository.url` 与当前 remote。
-   - 若当前项目以 `QianTangrong/NextConsole` 为准，更新 package 元数据。
-   - 若包发布归属仍是 `royalscome/NextConsole`，保持不变，但在维护文档中说明。
+   - 若当前项目以 `QianTangrong/Nconsole` 为准，更新 package 元数据。
+   - 若包发布归属仍是 `royalscome/Nconsole`，保持不变，但在维护文档中说明。
 
 验收命令：
 
@@ -96,8 +96,8 @@ npm audit --audit-level=moderate --registry=https://registry.npmjs.org
 
 - `npm audit` high 告警清零，或每个遗留 high 告警都有“来源、影响面、暂缓原因、后续计划”。
 - 构建产物保持以下兼容性：
-  - `dist/nextconsole.es.js`
-  - `dist/nextconsole.umd.js`
+  - `dist/nconsole.es.js`
+  - `dist/nconsole.umd.js`
   - `dist/index.d.ts`
   - `exports.import/require/types` 可用。
 
@@ -132,7 +132,7 @@ npm audit --audit-level=moderate --registry=https://registry.npmjs.org
    - history 数量受限。
 
 4. Playwright smoke
-   - 在 `examples/index.html` 创建 `NextConsole`。
+   - 在 `examples/index.html` 创建 `Nconsole`。
    - 点击浮动按钮后面板可见。
    - 切换 Console/Network/Storage tab 不报错。
    - 调用 `fetch` 后 Network tab 出现记录。
@@ -295,4 +295,4 @@ npm audit --audit-level=moderate --registry=https://registry.npmjs.org
 
 ## 8. 一句话结论
 
-NextConsole 的核心功能已经成型，最优先的优化不是继续堆功能，而是先把包管理、依赖安全、自动化测试和发布门禁补齐；等工程底座稳定后，再有节奏地优化全局 hook、REPL 安全边界和高频网络/日志场景。
+Nconsole 的核心功能已经成型，最优先的优化不是继续堆功能，而是先把包管理、依赖安全、自动化测试和发布门禁补齐；等工程底座稳定后，再有节奏地优化全局 hook、REPL 安全边界和高频网络/日志场景。

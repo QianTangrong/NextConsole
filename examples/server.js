@@ -30,7 +30,7 @@ const server = http.createServer((req, res) => {
     });
 
     const events = [
-      { event: 'connected', data: { status: 'ok', server: 'NextConsole Test', time: new Date().toISOString() } },
+      { event: 'connected', data: { status: 'ok', server: 'Nconsole Test', time: new Date().toISOString() } },
       { event: 'user_login', data: { userId: 'u_12345', name: '张三', role: 'admin' } },
       { event: 'order_created', data: { orderId: 'ORD-20260415-001', amount: 299.9, items: 3 } },
       { event: 'notification', data: { title: '系统通知', body: '服务器负载正常，CPU 23%，内存 61%' } },
@@ -65,7 +65,7 @@ const server = http.createServer((req, res) => {
       'Connection': 'keep-alive',
     });
 
-    const text = 'NextConsole 是新一代前端调试控制台，专为 AI 流式输出场景优化。它使用 Shadow DOM 实现完全隔离，支持 console/network/storage/element/system 五大面板，并提供 appendStream API 实现实时流式日志渲染。';
+    const text = 'Nconsole 是新一代前端调试控制台，专为 AI 流式输出场景优化。它使用 Shadow DOM 实现完全隔离，支持 console/network/storage/element/system 五大面板，并提供 appendStream API 实现实时流式日志渲染。';
     const tokens = text.split('');
     let i = 0;
 
@@ -90,7 +90,7 @@ const server = http.createServer((req, res) => {
   if (req.url === '/') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
-      name: 'NextConsole Test Server',
+      name: 'Nconsole Test Server',
       endpoints: {
         sse: `http://localhost:${PORT}/sse`,
         sseAI: `http://localhost:${PORT}/sse/ai`,
@@ -111,7 +111,7 @@ wss.on('connection', (ws) => {
   console.log('🔌 WebSocket 客户端已连接');
 
   // Welcome
-  ws.send(JSON.stringify({ type: 'welcome', data: { message: '连接成功', server: 'NextConsole Test', time: new Date().toISOString() } }));
+  ws.send(JSON.stringify({ type: 'welcome', data: { message: '连接成功', server: 'Nconsole Test', time: new Date().toISOString() } }));
 
   // Simulate server push messages
   const pushMsgs = [
@@ -172,7 +172,7 @@ wss.on('connection', (ws) => {
 server.listen(PORT, () => {
   console.log(`
 ╔══════════════════════════════════════════╗
-║   NextConsole Test Server               ║
+║   Nconsole Test Server               ║
 ║                                         ║
 ║   SSE:  http://localhost:${PORT}/sse       ║
 ║   AI:   http://localhost:${PORT}/sse/ai    ║

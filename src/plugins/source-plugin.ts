@@ -1,7 +1,7 @@
 /**
  * 源码插件：枚举页面脚本与样式资源，并以只读方式展示其来源和内容摘要。
  */
-import type { NextConsolePlugin, PluginAPI } from '../types/plugin';
+import type { NconsolePlugin, PluginAPI } from '../types/plugin';
 import { escapeHTML } from '../utils/dom';
 
 interface SourceEntry {
@@ -167,7 +167,7 @@ function collectSources(): SourceEntry[] {
   // Inline styles
   document.querySelectorAll('style').forEach((el) => {
     const text = el.textContent || '';
-    if (text.trim() && !el.closest('#nextconsole-host')) {
+    if (text.trim() && !el.closest('#nconsole-host')) {
       entries.push({ type: 'inline-style', content: text, size: text.length });
     }
   });
@@ -190,7 +190,7 @@ function getDisplayName(entry: SourceEntry): string {
 }
 
 /** 创建只读源码检查插件，避免对宿主脚本和样式产生任何修改。 */
-export function createSourcePlugin(): NextConsolePlugin {
+export function createSourcePlugin(): NconsolePlugin {
   let container: HTMLElement;
   let currentView: 'list' | 'detail' = 'list';
 

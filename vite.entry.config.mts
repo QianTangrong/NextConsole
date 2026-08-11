@@ -8,27 +8,27 @@ const entries = {
   lite: {
     entry: 'src/lite.ts',
     fileName: 'lite.js',
-    name: 'NextConsoleLite',
+    name: 'NconsoleLite',
   },
   core: {
     entry: 'src/core.ts',
     fileName: 'core.js',
-    name: 'NextConsoleCore',
+    name: 'NconsoleCore',
   },
   'plugin-source': {
     entry: 'src/plugins/source-plugin.ts',
     fileName: 'plugins/source.js',
-    name: 'NextConsoleSourcePlugin',
+    name: 'NconsoleSourcePlugin',
   },
   'plugin-performance': {
     entry: 'src/plugins/performance-plugin.ts',
     fileName: 'plugins/performance.js',
-    name: 'NextConsolePerformancePlugin',
+    name: 'NconsolePerformancePlugin',
   },
   'plugin-mimo': {
     entry: 'src/plugins/mimo-ai-diagnosis-plugin.ts',
     fileName: 'plugins/mimo-ai-diagnosis.js',
-    name: 'NextConsoleMimoAIDiagnosisPlugin',
+    name: 'NconsoleMimoAIDiagnosisPlugin',
   },
 } as const;
 

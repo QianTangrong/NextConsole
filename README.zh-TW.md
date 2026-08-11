@@ -1,4 +1,4 @@
-# NextConsole
+# Nconsole
 
 > 新一代前端除錯主控台。vConsole 的現代化替代方案，支援 AI 串流日誌、REPL、外掛系統，專為行動端 H5 與現代 Web 最佳化。
 
@@ -14,7 +14,7 @@
 - **Element 面板** — 可折疊的 DOM 樹狀檢視器，支援懸停高亮顯示
 - **System 面板** — UA、螢幕資訊、裝置記憶體、網路類型、效能指標（FP、FCP、Heap）
 - **REPL 面板** — 在全域作用域執行 JavaScript，支援命令歷史（↑/↓）、結果格式化與錯誤顯示
-- **外掛系統** — 透過簡潔的外掛 API 為 NextConsole 新增自訂分頁、樣式與邏輯
+- **外掛系統** — 透過簡潔的外掛 API 為 Nconsole 新增自訂分頁、樣式與邏輯
 - **Shadow DOM 隔離** — 無全域 CSS 污染，無 DOM 衝突
 - **零依賴** — 純原生 TypeScript，無框架綁定
 - **深色 / 淺色主題** — 內建深色和淺色兩套主題，支援透過 `setTheme()` 於執行時動態切換
@@ -27,16 +27,16 @@
 
 | 工具 | 壓縮前 | Gzip 後 | 依賴數 |
 | --- | --- | --- | --- |
-| **NextConsole** | **99 KB** | **23 KB** | **0** |
+| **Nconsole** | **99 KB** | **23 KB** | **0** |
 | vConsole 3.15 | 277 KB | 76 KB | 4 |
 | Eruda 3.4 | 485 KB | 147 KB | 0（已打包） |
 | Chii 1.15 | 不適用（伺服器端） | 不適用 | 9 |
 
-NextConsole 比 vConsole **小 3.3 倍**，比 Eruda **小 6.4 倍**（gzip 後）。
+Nconsole 比 vConsole **小 3.3 倍**，比 Eruda **小 6.4 倍**（gzip 後）。
 
 ### 功能對比
 
-| 功能 | NextConsole | vConsole | Eruda | Chii |
+| 功能 | Nconsole | vConsole | Eruda | Chii |
 | --- | :---: | :---: | :---: | :---: |
 | Console 日誌 | ✅ | ✅ | ✅ | ✅ |
 | AI 串流日誌 | ✅ | ❌ | ❌ | ❌ |
@@ -61,7 +61,7 @@ NextConsole 比 vConsole **小 3.3 倍**，比 Eruda **小 6.4 倍**（gzip 後�
 
 ### 架構對比
 
-| 面向 | NextConsole | vConsole | Eruda | Chii |
+| 面向 | Nconsole | vConsole | Eruda | Chii |
 | --- | --- | --- | --- | --- |
 | 渲染方式 | Shadow DOM | body 內 `<div>` | body 內 `<div>` | Chrome DevTools |
 | CSS 隔離 | 完整（Shadow DOM） | 作用域 class | 作用域 class | iframe |
@@ -75,13 +75,13 @@ NextConsole 比 vConsole **小 3.3 倍**，比 Eruda **小 6.4 倍**（gzip 後�
 ### CDN / 單一檔案
 
 ```html
-<script src="https://unpkg.com/nconsole/dist/nextconsole.min.js"></script>
+<script src="https://unpkg.com/nconsole/dist/nconsole.min.js"></script>
 <script>
-  var nc = new NextConsole();
+  var nc = new Nconsole();
 </script>
 ```
 
-`nextconsole.min.js` 已包含全部執行期程式碼，不依賴額外分包或 source map。將這一個檔案上傳到 CDN 後，即可透過一般 `<script>` 標籤直接載入。
+`nconsole.min.js` 已包含全部執行期程式碼，不依賴額外分包或 source map。將這一個檔案上傳到 CDN 後，即可透過一般 `<script>` 標籤直接載入。
 
 ### ES 模組
 
@@ -90,9 +90,9 @@ npm install nconsole
 ```
 
 ```js
-import NextConsole from 'nconsole';
+import Nconsole from 'nconsole';
 
-const nc = new NextConsole({
+const nc = new Nconsole({
   defaultTab: 'console',
   panelHeight: 0.4,
   theme: 'light', // 'dark'（預設）或 'light'
@@ -108,12 +108,16 @@ nc.setTheme('light');
 nc.toggle();
 ```
 
+## 版本 2 遷移
+
+版本 2 包含破壞性的公開名稱變更：建構函式和匯入識別碼統一為 `Nconsole`；公開型別統一為 `NconsoleConfig`、`NconsoleCoreConfig`、`NconsoleLiteConfig` 和 `NconsolePlugin`；傳統腳本檔案統一為 `nconsole*.js`；自訂 DOM 選擇器改為 `#nconsole-host`。npm 套件名稱及子路徑繼續使用小寫 `nconsole`。
+
 ## AI 串流日誌
 
-NextConsole 原生支援 AI/LLM 串流輸出：
+Nconsole 原生支援 AI/LLM 串流輸出：
 
 ```js
-const nc = new NextConsole();
+const nc = new Nconsole();
 
 // 開始串流 — 資料片段即時追加
 nc.appendStream('chat-1', 'Hello ');
@@ -128,10 +132,10 @@ nc.endStream('chat-1');
 
 ## 外掛系統
 
-使用自訂面板和邏輯擴充 NextConsole：
+使用自訂面板和邏輯擴充 Nconsole：
 
 ```js
-const nc = new NextConsole();
+const nc = new Nconsole();
 
 nc.use({
   name: 'my-plugin',
@@ -166,7 +170,7 @@ nc.use({
 ### 外掛介面
 
 ```ts
-interface NextConsolePlugin {
+interface NconsolePlugin {
   name: string;           // 唯一外掛名稱
   version?: string;       // 外掛版本
   tab?: {                 // 可選的自訂分頁
@@ -181,16 +185,16 @@ interface NextConsolePlugin {
 
 ### 內建外掛
 
-NextConsole 內建兩個官方外掛：
+Nconsole 內建兩個官方外掛：
 
 #### Source 外掛
 
 檢視頁面所有指令碼和樣式表（外部及行內），提供完整原始碼檢視器：
 
 ```js
-import NextConsole, { createSourcePlugin } from 'nconsole';
+import Nconsole, { createSourcePlugin } from 'nconsole';
 
-const nc = new NextConsole();
+const nc = new Nconsole();
 nc.use(createSourcePlugin());
 ```
 
@@ -199,16 +203,16 @@ nc.use(createSourcePlugin());
 Core Web Vitals、資源明細、長任務偵測，以及自訂效能標記：
 
 ```js
-import NextConsole, { createPerformancePlugin } from 'nconsole';
+import Nconsole, { createPerformancePlugin } from 'nconsole';
 
-const nc = new NextConsole();
+const nc = new Nconsole();
 nc.use(createPerformancePlugin());
 ```
 
 ## 設定選項
 
 ```ts
-interface NextConsoleConfig {
+interface NconsoleConfig {
   /** 掛載目標（預設：document.body） */
   target?: HTMLElement;
   /** 預設啟用的分頁 */
@@ -238,7 +242,7 @@ interface NextConsoleConfig {
     showSessionStorage?: boolean;  // 預設：true
     showCookies?: boolean;         // 預設：true
   };
-  /** NextConsole 就緒後的回呼函式 */
+  /** Nconsole 就緒後的回呼函式 */
   onReady?: () => void;
 }
 ```

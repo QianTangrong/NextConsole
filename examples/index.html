@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>NextConsole Demo</title>
+  <title>Nconsole Demo</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -66,7 +66,7 @@
 <body>
   <h1>
     <img src="../public/asset/logo.png" class="logo" alt="">
-    <span>NextConsole Demo</span>
+    <span>Nconsole Demo</span>
   </h1>
   <p>Tap the floating <strong>NC</strong> button to open the debug panel. Try the demos below.</p>
 
@@ -119,9 +119,9 @@
 
   <div class="section">
     <h2>Quick Start</h2>
-    <pre>&lt;script src="nextconsole.min.js"&gt;&lt;/script&gt;
+    <pre>&lt;script src="nconsole.min.js"&gt;&lt;/script&gt;
 &lt;script&gt;
-  var nc = new NextConsole();
+  var nc = new Nconsole();
   // AI streaming:
   nc.appendStream('s1', 'Hello ');
   nc.appendStream('s1', 'World!');
@@ -129,11 +129,11 @@
 &lt;/script&gt;</pre>
   </div>
 
-  <!-- 开发模式直接从源码加载 NextConsole，便于演示页同步验证最新实现。 -->
+  <!-- 开发模式直接从源码加载 Nconsole，便于演示页同步验证最新实现。 -->
   <script type="module">
-    import NextConsole from '../src/index.ts';
+    import Nconsole from '../src/index.ts';
 
-    const nc = new NextConsole({
+    const nc = new Nconsole({
       defaultTab: 'console',
       panelHeight: 0.4,
     });
@@ -142,7 +142,7 @@
     window.nc = nc;
 
     // 基础日志用例覆盖不同日志级别、对象参数和大量连续写入。
-    window.demoLog = () => console.log('Hello from NextConsole!', { version: '1.0.0', ts: Date.now() });
+    window.demoLog = () => console.log('Hello from Nconsole!', { version: '1.0.0', ts: Date.now() });
     window.demoInfo = () => console.info('ℹ️ Info message', 'Multiple args supported');
     window.demoWarn = () => console.warn('⚠️ Warning: something looks off', { code: 'W001' });
     window.demoError = () => console.error('❌ Error occurred!', new Error('Test error'));
@@ -164,7 +164,7 @@
     window.demoStream = () => {
       const output = document.getElementById('demo-output');
       const streamId = 'demo-' + Date.now();
-      const text = 'NextConsole supports AI streaming logs. Each chunk is appended in real-time without freezing the UI. This is perfect for LLM token-by-token output display. ';
+      const text = 'Nconsole supports AI streaming logs. Each chunk is appended in real-time without freezing the UI. This is perfect for LLM token-by-token output display. ';
       let idx = 0;
       output.textContent = '';
 
@@ -245,7 +245,7 @@
       console.log('Cookie set. Switch to Storage tab to view.');
     };
 
-    console.log('%c NextConsole Demo Loaded ', 'background:#0078d4;color:#fff;padding:4px 8px;border-radius:4px');
+    console.log('%c Nconsole Demo Loaded ', 'background:#0078d4;color:#fff;padding:4px 8px;border-radius:4px');
     console.info('Click the NC button or use the demo buttons to test features.');
   </script>
 </body>

@@ -1,24 +1,24 @@
 import type {
   LogEntry,
   NetworkEntry,
-  NextConsoleCoreConfig,
-  NextConsolePlugin,
+  NconsoleCoreConfig,
+  NconsolePlugin,
 } from '../types';
 import { MainPanel } from '../ui/main-panel';
 
 /** Track the mounted UI instance to prevent competing global hooks. */
-let instance: NextConsole | null = null;
+let instance: Nconsole | null = null;
 
 /**
- * Plugin-free NextConsole UI runtime used by the Lite entry.
+ * Plugin-free Nconsole UI runtime used by the Lite entry.
  *
  * Optional plugins are deliberately provided as constructor inputs instead of
  * static imports so Lite consumers do not pay for plugins they do not use.
  */
-export class NextConsole {
+export class Nconsole {
   private panel: MainPanel;
 
-  constructor(config: NextConsoleCoreConfig = {}, initialPlugins: NextConsolePlugin[] = []) {
+  constructor(config: NconsoleCoreConfig = {}, initialPlugins: NconsolePlugin[] = []) {
     if (instance) {
       instance.destroy();
     }
@@ -87,7 +87,7 @@ export class NextConsole {
     return this.panel.getNetworkCore().getEntries();
   }
 
-  use(plugin: NextConsolePlugin): this {
+  use(plugin: NconsolePlugin): this {
     this.panel.use(plugin);
     return this;
   }

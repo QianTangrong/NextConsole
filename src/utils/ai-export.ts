@@ -52,7 +52,7 @@ export function createAIExport(logEntries: LogEntry[], networkEntries: NetworkEn
   const relatedNetwork = new Map<number, NetworkEntry>();
 
   const sections = [
-    '# NextConsole AI Debug Context',
+    '# Nconsole AI Debug Context',
     '',
     '> Generated from the current page. Sensitive headers, query parameters, form values, and common credential fields are redacted before export. Review it before pasting into a third-party AI.',
     '',
@@ -328,7 +328,7 @@ function sanitizeValue(value: unknown, overrides: Partial<SanitizationOptions> =
  */
 function createDOMSnapshot(): string {
   const root = document.documentElement.cloneNode(true) as HTMLElement;
-  root.querySelectorAll('#nextconsole-host, script, style, link[rel="stylesheet"], noscript').forEach((element) => element.remove());
+  root.querySelectorAll('#nconsole-host, script, style, link[rel="stylesheet"], noscript').forEach((element) => element.remove());
 
   root.querySelectorAll('input, textarea, select, [contenteditable]').forEach((element) => {
     const tagName = element.tagName.toLowerCase();

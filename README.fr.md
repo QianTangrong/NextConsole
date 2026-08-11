@@ -1,4 +1,4 @@
-# NextConsole
+# Nconsole
 
 > Console de debogage front-end de nouvelle generation. Une alternative moderne a vConsole, avec prise en charge des journaux IA en streaming, REPL et systeme de plugins, optimisee pour le H5 mobile et le Web moderne.
 
@@ -14,7 +14,7 @@
 - **Panneau Elements** - Explorateur d'arbre DOM repliable avec surbrillance au survol
 - **Panneau Systeme** - UA, ecran, memoire de l'appareil, type de reseau et metriques de performance (FP, FCP, heap)
 - **Panneau REPL** - Execute du JavaScript dans la portee globale avec historique des commandes (↑/↓), formatage du resultat et affichage des erreurs
-- **Systeme de plugins** - Etendez NextConsole avec des onglets, styles et logiques personnalises via une API simple
+- **Systeme de plugins** - Etendez Nconsole avec des onglets, styles et logiques personnalises via une API simple
 - **Isolation Shadow DOM** - Pas de pollution CSS globale, pas de conflit DOM
 - **Zero dependance** - TypeScript pur, sans verrouillage sur un framework
 - **Theme sombre / clair** - Themes sombre et clair integres, commutables a l'execution via `setTheme()`
@@ -27,16 +27,16 @@
 
 | Outil | Minifie | Gzippe | Dependances |
 | --- | --- | --- | --- |
-| **NextConsole** | **99 KB** | **23 KB** | **0** |
+| **Nconsole** | **99 KB** | **23 KB** | **0** |
 | vConsole 3.15 | 277 KB | 76 KB | 4 |
 | Eruda 3.4 | 485 KB | 147 KB | 0 (integrees) |
 | Chii 1.15 | N/A (serveur) | N/A | 9 |
 
-NextConsole est **3,3x plus petit** que vConsole et **6,4x plus petit** que Eruda (en gzip).
+Nconsole est **3,3x plus petit** que vConsole et **6,4x plus petit** que Eruda (en gzip).
 
 ### Comparatif des fonctionnalites
 
-| Fonctionnalite | NextConsole | vConsole | Eruda | Chii |
+| Fonctionnalite | Nconsole | vConsole | Eruda | Chii |
 | --- | :---: | :---: | :---: | :---: |
 | Journaux Console | ✅ | ✅ | ✅ | ✅ |
 | Journal IA en streaming | ✅ | ❌ | ❌ | ❌ |
@@ -61,7 +61,7 @@ NextConsole est **3,3x plus petit** que vConsole et **6,4x plus petit** que Erud
 
 ### Architecture
 
-| Aspect | NextConsole | vConsole | Eruda | Chii |
+| Aspect | Nconsole | vConsole | Eruda | Chii |
 | --- | --- | --- | --- | --- |
 | Rendu | Shadow DOM | `<div>` dans le body | `<div>` dans le body | Chrome DevTools |
 | Isolation CSS | Complete (Shadow DOM) | Classes scopees | Classes scopees | iframe |
@@ -75,13 +75,13 @@ NextConsole est **3,3x plus petit** que vConsole et **6,4x plus petit** que Erud
 ### CDN / fichier unique
 
 ```html
-<script src="https://unpkg.com/nconsole/dist/nextconsole.min.js"></script>
+<script src="https://unpkg.com/nconsole/dist/nconsole.min.js"></script>
 <script>
-  var nc = new NextConsole();
+  var nc = new Nconsole();
 </script>
 ```
 
-`nextconsole.min.js` contient tout le code d'execution et ne depend d'aucun chunk ni source map supplementaire. Uploadez ce seul fichier sur votre CDN, puis chargez-le avec une balise `<script>` classique.
+`nconsole.min.js` contient tout le code d'execution et ne depend d'aucun chunk ni source map supplementaire. Uploadez ce seul fichier sur votre CDN, puis chargez-le avec une balise `<script>` classique.
 
 ### Module ES
 
@@ -90,9 +90,9 @@ npm install nconsole
 ```
 
 ```js
-import NextConsole from 'nconsole';
+import Nconsole from 'nconsole';
 
-const nc = new NextConsole({
+const nc = new Nconsole({
   defaultTab: 'console',
   panelHeight: 0.4,
   theme: 'light', // 'dark' (par defaut) ou 'light'
@@ -108,12 +108,16 @@ nc.setTheme('light');
 nc.toggle();
 ```
 
+## Migration vers la version 2
+
+La version 2 introduit une rupture sur les noms publics : utilisez `Nconsole` pour le constructeur et les imports ; `NconsoleConfig`, `NconsoleCoreConfig`, `NconsoleLiteConfig` et `NconsolePlugin` pour les types publics ; `nconsole*.js` pour les scripts classiques ; et `#nconsole-host` pour les selecteurs DOM personnalises. Le paquet npm et ses sous-chemins restent en minuscules : `nconsole`.
+
 ## Journaux IA en streaming
 
-NextConsole prend en charge nativement les sorties IA/LLM en streaming :
+Nconsole prend en charge nativement les sorties IA/LLM en streaming :
 
 ```js
-const nc = new NextConsole();
+const nc = new Nconsole();
 
 // Demarrer le streaming - les morceaux sont ajoutes en temps reel
 nc.appendStream('chat-1', 'Bonjour ');
@@ -128,10 +132,10 @@ Cela evite les gels d'UI, meme avec des milliers de mises a jour rapides, grace 
 
 ## Systeme de plugins
 
-Etendez NextConsole avec des panneaux et des logiques personnalises :
+Etendez Nconsole avec des panneaux et des logiques personnalises :
 
 ```js
-const nc = new NextConsole();
+const nc = new Nconsole();
 
 nc.use({
   name: 'my-plugin',
@@ -166,7 +170,7 @@ nc.use({
 ### Interface de plugin
 
 ```ts
-interface NextConsolePlugin {
+interface NconsolePlugin {
   name: string;           // Nom de plugin unique
   version?: string;       // Version du plugin
   tab?: {                 // Onglet personnalise optionnel
@@ -181,16 +185,16 @@ interface NextConsolePlugin {
 
 ### Plugins integres
 
-NextConsole embarque deux plugins officiels :
+Nconsole embarque deux plugins officiels :
 
 #### Plugin Source
 
 Affiche tous les scripts et feuilles de style de la page (externes et inline) avec un visualiseur de code source complet :
 
 ```js
-import NextConsole, { createSourcePlugin } from 'nconsole';
+import Nconsole, { createSourcePlugin } from 'nconsole';
 
-const nc = new NextConsole();
+const nc = new Nconsole();
 nc.use(createSourcePlugin());
 ```
 
@@ -199,16 +203,16 @@ nc.use(createSourcePlugin());
 Core Web Vitals, repartition des ressources, detection des longues taches et marques de performance personnalisees :
 
 ```js
-import NextConsole, { createPerformancePlugin } from 'nconsole';
+import Nconsole, { createPerformancePlugin } from 'nconsole';
 
-const nc = new NextConsole();
+const nc = new Nconsole();
 nc.use(createPerformancePlugin());
 ```
 
 ## Configuration
 
 ```ts
-interface NextConsoleConfig {
+interface NconsoleConfig {
   /** Cible de montage (par defaut : document.body) */
   target?: HTMLElement;
   /** Onglet actif par defaut */
@@ -238,7 +242,7 @@ interface NextConsoleConfig {
     showSessionStorage?: boolean;  // par defaut : true
     showCookies?: boolean;         // par defaut : true
   };
-  /** Appele quand NextConsole est pret */
+  /** Appele quand Nconsole est pret */
   onReady?: () => void;
 }
 ```

@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>NextConsole 测试页面</title>
+  <title>Nconsole 测试页面</title>
   <style>
     :root {
       --bg: #0d1117;
@@ -100,7 +100,7 @@
 </head>
 <body>
 
-  <h1>🧪 NextConsole 测试页面</h1>
+  <h1>🧪 Nconsole 测试页面</h1>
   <p class="subtitle">点击右下角 NC 按钮打开调试面板，然后执行下面的测试用例</p>
 
   <!-- ==================== Console 测试 ==================== -->
@@ -217,19 +217,19 @@
 
   <script type="module">
     // 此页按模块分组暴露手工回归函数，所有函数均只操作 nc_ 命名空间的演示数据。
-    import NextConsole from '../src/index.ts';
+    import Nconsole from '../src/index.ts';
 
     // 初始化
-    let nc = new NextConsole({ defaultTab: 'console', panelHeight: 0.4 });
+    let nc = new Nconsole({ defaultTab: 'console', panelHeight: 0.4 });
     window.nc = nc;
     const output = document.getElementById('output');
 
-    /** 更新测试页自身输出，不经过 NextConsole，避免说明文字污染被测日志集合。 */
+    /** 更新测试页自身输出，不经过 Nconsole，避免说明文字污染被测日志集合。 */
     function log(msg) { output.textContent += msg + '\n'; output.scrollTop = output.scrollHeight; }
     function clearOutput() { output.textContent = ''; }
 
     // ==================== Console 测试 ====================
-    window.testLog = () => console.log('Hello NextConsole!', { ts: Date.now() });
+    window.testLog = () => console.log('Hello Nconsole!', { ts: Date.now() });
     window.testInfo = () => console.info('ℹ️ 这是一条 info 消息', 'version: 1.0.0');
     window.testWarn = () => console.warn('⚠️ 警告信息', { code: 'W001', detail: '请注意检查' });
     window.testError = () => console.error('❌ 发生错误', new Error('测试错误'));
@@ -348,7 +348,7 @@
 
     window.testStreamSlow = () => simulateStream(
       'slow',
-      'NextConsole 是新一代前端调试控制台，专为 AI 流式输出场景优化。支持 SSE、流式 JSON，具备虚拟列表渲染引擎，轻松处理万级日志。',
+      'Nconsole 是新一代前端调试控制台，专为 AI 流式输出场景优化。支持 SSE、流式 JSON，具备虚拟列表渲染引擎，轻松处理万级日志。',
       80,
     );
 
@@ -416,7 +416,7 @@
     };
 
     window.testStreamLong = () => {
-      const longText = `在人工智能领域，大语言模型（LLM）的流式输出是一种常见的交互模式。用户发送问题后，模型以 token 为单位逐步生成回答，通过 Server-Sent Events (SSE) 或 WebSocket 实时推送到前端。NextConsole 专门针对这一场景进行了优化：
+      const longText = `在人工智能领域，大语言模型（LLM）的流式输出是一种常见的交互模式。用户发送问题后，模型以 token 为单位逐步生成回答，通过 Server-Sent Events (SSE) 或 WebSocket 实时推送到前端。Nconsole 专门针对这一场景进行了优化：
 
 1. **流式缓冲机制**：通过 requestAnimationFrame 批量合并 UI 更新，避免高频 DOM 操作导致的卡顿。
 2. **虚拟列表渲染**：即使积累了上万条日志，面板依然保持流畅滚动。
@@ -442,7 +442,7 @@
         const res = await fetch('https://jsonplaceholder.typicode.com/posts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: 'NextConsole', body: '测试 POST', userId: 1 }),
+          body: JSON.stringify({ title: 'Nconsole', body: '测试 POST', userId: 1 }),
         });
         const data = await res.json();
         console.log('✅ Fetch POST 成功:', data);
@@ -558,21 +558,21 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `nextconsole-test-${Date.now()}.json`;
+      a.download = `nconsole-test-${Date.now()}.json`;
       a.click();
       URL.revokeObjectURL(url);
     };
 
     window.testDestroy = () => {
       nc.destroy();
-      console.log('NextConsole 已销毁（这条日志不会被捕获）');
-      alert('NextConsole 已销毁。点击"重新初始化"恢复。');
+      console.log('Nconsole 已销毁（这条日志不会被捕获）');
+      alert('Nconsole 已销毁。点击"重新初始化"恢复。');
     };
 
     window.testReinit = () => {
-      nc = new NextConsole({ defaultTab: 'console', panelHeight: 0.4 });
+      nc = new Nconsole({ defaultTab: 'console', panelHeight: 0.4 });
       window.nc = nc;
-      console.log('✅ NextConsole 已重新初始化');
+      console.log('✅ Nconsole 已重新初始化');
     };
 
     // ==================== API 验证 ====================
@@ -604,7 +604,7 @@
     };
 
     // 启动时输出
-    console.log('%c NextConsole 测试页面已加载 ', 'background:#0078d4;color:#fff;padding:4px 8px;border-radius:4px');
+    console.log('%c Nconsole 测试页面已加载 ', 'background:#0078d4;color:#fff;padding:4px 8px;border-radius:4px');
     console.info('🧪 测试页面就绪，请使用上方按钮进行测试');
   </script>
 </body>

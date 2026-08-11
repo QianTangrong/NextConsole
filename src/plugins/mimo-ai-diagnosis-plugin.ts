@@ -8,7 +8,7 @@ import type {
   MimoDiagnosisErrorContext,
   MimoDiagnosisRuntimeContext,
   NetworkEntry,
-  NextConsolePlugin,
+  NconsolePlugin,
   PluginAPI,
 } from '../types';
 
@@ -523,7 +523,7 @@ function addTextElement(parent: HTMLElement, tag: keyof HTMLElementTagNameMap, c
 /**
  * 创建按需启用的 AI 诊断插件。禁用时不注册面板、不采集额外数据，也不会发起网络请求。
  */
-export function createMimoAIDiagnosisPlugin(options: MimoAIDiagnosisOptions = {}): NextConsolePlugin {
+export function createMimoAIDiagnosisPlugin(options: MimoAIDiagnosisOptions = {}): NconsolePlugin {
   let api: PluginAPI | undefined;
   let container: HTMLElement | undefined;
   let keyInput: HTMLInputElement | undefined;
@@ -805,7 +805,7 @@ export function createMimoAIDiagnosisPlugin(options: MimoAIDiagnosisOptions = {}
     addTextElement(settings, 'div', 'nc-mimo-section-title', 'NewAPI AI 诊断');
     const settingsBody = document.createElement('div');
     settingsBody.className = 'nc-mimo-section-body';
-    addTextElement(settingsBody, 'div', 'nc-mimo-notice', '仅适用于开发调试。API Key 只保留在当前输入框中，刷新页面或销毁 NextConsole 后即消失。');
+    addTextElement(settingsBody, 'div', 'nc-mimo-notice', '仅适用于开发调试。API Key 只保留在当前输入框中，刷新页面或销毁 Nconsole 后即消失。');
     const label = document.createElement('label');
     label.className = 'nc-mimo-key-label';
     label.htmlFor = 'nc-mimo-api-key';

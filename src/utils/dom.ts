@@ -31,7 +31,7 @@ export function createElement<K extends keyof HTMLElementTagNameMap>(
   return el;
 }
 
-/** 为样式类添加 NextConsole 前缀，避免与宿主页面类名冲突。 */
+/** 为样式类添加 Nconsole 前缀，避免与宿主页面类名冲突。 */
 export function ncClass(...names: string[]): string {
   return names.map((n) => `${NC_PREFIX}${n}`).join(' ');
 }

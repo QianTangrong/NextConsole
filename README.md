@@ -1,4 +1,4 @@
-# NextConsole
+# Nconsole
 
 > Next-generation front-end debugging console. A modern replacement for vConsole with AI streaming log support, REPL, plugin system, optimized for mobile H5 and modern web.
 
@@ -14,7 +14,7 @@
 - **Element Panel** — Collapsible DOM tree viewer with hover-to-highlight
 - **System Panel** — UA, screen, device memory, network type, performance metrics (FP, FCP, heap)
 - **REPL Panel** — Execute JavaScript in global scope with command history (↑/↓), result formatting, and error display
-- **Plugin System** — Extend NextConsole with custom tabs, styles, and logic via a simple plugin API
+- **Plugin System** — Extend Nconsole with custom tabs, styles, and logic via a simple plugin API
 - **Shadow DOM Isolation** — No global CSS pollution, no DOM conflicts
 - **Zero Dependencies** — Pure vanilla TypeScript, no framework lock-in
 - **Dark / Light Theme** — Built-in dark and light themes, switchable at runtime via `setTheme()`
@@ -27,16 +27,16 @@
 
 | Tool | Minified | Gzipped | Dependencies |
 | --- | --- | --- | --- |
-| **NextConsole** | **99 KB** | **23 KB** | **0** |
+| **Nconsole** | **99 KB** | **23 KB** | **0** |
 | vConsole 3.15 | 277 KB | 76 KB | 4 |
 | Eruda 3.4 | 485 KB | 147 KB | 0 (bundled) |
 | Chii 1.15 | N/A (server) | N/A | 9 |
 
-NextConsole is **3.3x smaller** than vConsole and **6.4x smaller** than Eruda (gzipped).
+Nconsole is **3.3x smaller** than vConsole and **6.4x smaller** than Eruda (gzipped).
 
 ### Feature Comparison
 
-| Feature | NextConsole | vConsole | Eruda | Chii |
+| Feature | Nconsole | vConsole | Eruda | Chii |
 | --- | :---: | :---: | :---: | :---: |
 | Console Log | ✅ | ✅ | ✅ | ✅ |
 | AI Streaming Log | ✅ | ❌ | ❌ | ❌ |
@@ -61,7 +61,7 @@ NextConsole is **3.3x smaller** than vConsole and **6.4x smaller** than Eruda (g
 
 ### Architecture
 
-| Aspect | NextConsole | vConsole | Eruda | Chii |
+| Aspect | Nconsole | vConsole | Eruda | Chii |
 | --- | --- | --- | --- | --- |
 | Rendering | Shadow DOM | `<div>` in body | `<div>` in body | Chrome DevTools |
 | CSS Isolation | Full (Shadow DOM) | Scoped class | Scoped class | iframe |
@@ -75,13 +75,13 @@ NextConsole is **3.3x smaller** than vConsole and **6.4x smaller** than Eruda (g
 ### CDN / Single File
 
 ```html
-<script src="https://unpkg.com/nconsole/dist/nextconsole.min.js"></script>
+<script src="https://unpkg.com/nconsole/dist/nconsole.min.js"></script>
 <script>
-  var nc = new NextConsole();
+  var nc = new Nconsole();
 </script>
 ```
 
-`nextconsole.min.js` contains all runtime code and has no additional chunk or source-map dependency. After uploading this one file to your CDN, it can be loaded with a classic `<script>` tag.
+`nconsole.min.js` contains all runtime code and has no additional chunk or source-map dependency. After uploading this one file to your CDN, it can be loaded with a classic `<script>` tag.
 
 ### ES Module
 
@@ -90,9 +90,9 @@ npm install nconsole
 ```
 
 ```js
-import NextConsole from 'nconsole';
+import Nconsole from 'nconsole';
 
-const nc = new NextConsole({
+const nc = new Nconsole({
   defaultTab: 'console',
   panelHeight: 0.4,
   theme: 'light', // 'dark' (default) or 'light'
@@ -108,19 +108,23 @@ nc.setTheme('light');
 nc.toggle();
 ```
 
+## Version 2 Migration
+
+Version 2 is a breaking public-name change. Update constructor and import identifiers to `Nconsole`; public types to `NconsoleConfig`, `NconsoleCoreConfig`, `NconsoleLiteConfig`, and `NconsolePlugin`; classic-script files to `nconsole*.js`; and custom DOM selectors to `#nconsole-host`. The npm package and its subpaths remain lowercase `nconsole`.
+
 ## Lite, Core, and Optional Plugins
 
-The legacy `nconsole` entry remains fully compatible and includes the built-in
-plugin factories. New integrations can select a smaller public entry instead:
+The full `nconsole` root entry includes the built-in plugin factories. New
+integrations can select a smaller public entry instead:
 
 ```js
 // Full Shadow DOM UI, without any optional plugin implementation.
-import NextConsole from 'nconsole/lite';
+import Nconsole from 'nconsole/lite';
 
 // Each optional feature is a separate import and is only included when used.
 import { createPerformancePlugin } from 'nconsole/plugins/performance';
 
-const nc = new NextConsole();
+const nc = new Nconsole();
 nc.use(createPerformancePlugin());
 ```
 
@@ -139,17 +143,17 @@ networkCore.init();
 Available optional plugin entries are `nconsole/plugins/source`,
 `nconsole/plugins/performance`, and `nconsole/plugins/mimo-ai-diagnosis`.
 For a classic script tag without optional plugins, load
-`dist/nextconsole.lite.min.js` instead of `dist/nextconsole.min.js`.
+`dist/nconsole.lite.min.js` instead of `dist/nconsole.min.js`.
 
 Every public build artifact is checked by `npm run check:bundle`; the limits
 are versioned in `bundle-budget.json` and include both raw and gzip sizes.
 
 ## AI Streaming Logs
 
-NextConsole has first-class support for AI/LLM streaming output:
+Nconsole has first-class support for AI/LLM streaming output:
 
 ```js
-const nc = new NextConsole();
+const nc = new Nconsole();
 
 // Start streaming — chunks are appended in real-time
 nc.appendStream('chat-1', 'Hello ');
@@ -164,10 +168,10 @@ This avoids UI freezes even with thousands of rapid updates by batching renders 
 
 ## Plugin System
 
-Extend NextConsole with custom panels and logic:
+Extend Nconsole with custom panels and logic:
 
 ```js
-const nc = new NextConsole();
+const nc = new Nconsole();
 
 nc.use({
   name: 'my-plugin',
@@ -202,7 +206,7 @@ nc.use({
 ### Plugin Interface
 
 ```ts
-interface NextConsolePlugin {
+interface NconsolePlugin {
   name: string;           // Unique plugin name
   version?: string;       // Plugin version
   tab?: {                 // Optional custom tab
@@ -217,16 +221,16 @@ interface NextConsolePlugin {
 
 ### Built-in Plugins
 
-NextConsole ships with two official plugins:
+Nconsole ships with two official plugins:
 
 #### Source Plugin
 
 View all page scripts and stylesheets (external & inline) with full source code viewer:
 
 ```js
-import NextConsole, { createSourcePlugin } from 'nconsole';
+import Nconsole, { createSourcePlugin } from 'nconsole';
 
-const nc = new NextConsole();
+const nc = new Nconsole();
 nc.use(createSourcePlugin());
 ```
 
@@ -235,16 +239,16 @@ nc.use(createSourcePlugin());
 Core Web Vitals, resource breakdown, long task detection, and custom performance marks:
 
 ```js
-import NextConsole, { createPerformancePlugin } from 'nconsole';
+import Nconsole, { createPerformancePlugin } from 'nconsole';
 
-const nc = new NextConsole();
+const nc = new Nconsole();
 nc.use(createPerformancePlugin());
 ```
 
 ## Configuration
 
 ```ts
-interface NextConsoleConfig {
+interface NconsoleConfig {
   /** Mount target (default: document.body) */
   target?: HTMLElement;
   /** Default active tab */
@@ -275,7 +279,7 @@ interface NextConsoleConfig {
     showSessionStorage?: boolean;  // default: true
     showCookies?: boolean;         // default: true
   };
-  /** Called when NextConsole is ready */
+  /** Called when Nconsole is ready */
   onReady?: () => void;
 }
 ```

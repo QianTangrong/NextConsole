@@ -27,7 +27,7 @@ export class FloatButton {
     this.el = document.createElement('button');
     this.el.className = 'nc-float-btn';
     this.el.textContent = 'NC';
-    this.el.setAttribute('aria-label', 'Toggle NextConsole');
+    this.el.setAttribute('aria-label', 'Toggle Nconsole');
 
     // Default position: bottom-right
     const x = position?.x ?? window.innerWidth - 64;

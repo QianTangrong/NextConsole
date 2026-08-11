@@ -11,7 +11,7 @@ function reportListenerError(error: unknown): void {
 
   reportingListenerError = true;
   try {
-    console.error('[NextConsole] event listener error', error);
+    console.error('[Nconsole] event listener error', error);
   } finally {
     reportingListenerError = false;
   }
