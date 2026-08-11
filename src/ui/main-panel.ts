@@ -88,53 +88,68 @@ export class MainPanel {
   }
 
   /** 初始化核心模块与界面；挂载函数可等待 DOM 就绪后安全执行。 */
-  init(): void {
+  init(onFatalError?: (error: unknown) => void): void {
     const mount = () => {
       if (this.destroyed || this.mounted) return;
 
-      const target = this.config.target || document.body;
-      target.appendChild(this.host);
+      try {
+        const target = this.config.target || document.body;
+        target.appendChild(this.host);
 
-      // Inject styles
-      const style = document.createElement('style');
-      style.textContent = THEME_CSS;
-      this.shadow.appendChild(style);
+        // Inject styles
+        const style = document.createElement('style');
+        style.textContent = THEME_CSS;
+        this.shadow.appendChild(style);
 
-      // Apply theme
-      this.applyTheme(this.config.theme || 'dark');
+        // Apply theme
+        this.applyTheme(this.config.theme || 'dark');
 
-      // Create float button
-      this.floatButton = new FloatButton(
-        this.shadow,
-        () => this.toggle(),
-        this.config.buttonPosition,
-      );
+        // Create float button
+        this.floatButton = new FloatButton(
+          this.shadow,
+          () => this.toggle(),
+          this.config.buttonPosition,
+        );
 
-      // Create panel
-      this.createPanel();
+        // Create panel
+        this.createPanel();
 
-      // Init cores
-      this.consoleCore.init();
-      this.networkCore.init();
-      this.storageCore.init();
-      this.elementCore.init();
+        // Init cores
+        this.consoleCore.init();
+        this.networkCore.init();
+        this.storageCore.init();
+        this.elementCore.init();
 
-      // Apply initial panel height
-      if (this.config.panelHeight) {
-        const h = clamp(this.config.panelHeight, 0.1, 0.9);
-        this.panelEl.style.setProperty('--nc-panel-height', `${h * 100}vh`);
+        // Apply initial panel height
+        if (this.config.panelHeight) {
+          const h = clamp(this.config.panelHeight, 0.1, 0.9);
+          this.panelEl.style.setProperty('--nc-panel-height', `${h * 100}vh`);
+        }
+
+        this.initialized = true;
+        this.mounted = true;
+
+        // Initialize pending plugins
+        for (const plugin of this.plugins) {
+          this.initPlugin(plugin);
+        }
+
+        this.applyVisibility();
+        this.config.onReady?.();
+      } catch (error) {
+        // 初始化是事务边界；任一步骤失败都不能遗留半挂载 DOM 或全局采集 Hook。
+        try {
+          this.destroy();
+        } catch {
+          // 清理异常不能覆盖更有定位价值的初始化异常。
+        }
+        try {
+          onFatalError?.(error);
+        } catch {
+          // 生命周期通知只负责同步外部状态，不能覆盖原始初始化异常。
+        }
+        throw error;
       }
-
-      this.initialized = true;
-      this.mounted = true;
-
-      // Initialize pending plugins
-      for (const plugin of this.plugins) {
-        this.initPlugin(plugin);
-      }
-
-      this.applyVisibility();
-      this.config.onReady?.();
     };
 
     // Ensure DOM is ready before mounting

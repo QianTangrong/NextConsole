@@ -22,13 +22,30 @@ export class Nconsole {
     if (instance) {
       instance.destroy();
     }
-    instance = this;
 
-    this.panel = new MainPanel(config);
-    for (const plugin of initialPlugins) {
-      this.panel.use(plugin);
+    const panel = new MainPanel(config);
+    this.panel = panel;
+    try {
+      for (const plugin of initialPlugins) {
+        panel.use(plugin);
+      }
+      panel.init(() => {
+        // DOMContentLoaded 后的延迟挂载失败时，同样释放已经公布的单例引用。
+        if (instance === this) {
+          instance = null;
+        }
+      });
+    } catch (error) {
+      // 构造失败的实例不会进入全局单例；同步清理已挂载的 DOM、Hook 和插件资源。
+      try {
+        panel.destroy();
+      } catch {
+        // 保留真正导致初始化失败的原始异常。
+      }
+      throw error;
     }
-    this.panel.init();
+
+    instance = this;
   }
 
   show(): void {
