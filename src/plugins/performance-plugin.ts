@@ -19,6 +19,10 @@ interface ResourceEntry {
   startTime: number;
 }
 
+const MAX_LONG_TASKS = 200;
+const MAX_CUSTOM_MARKS = 100;
+const MAX_RENDERED_MARKS = 100;
+
 const PERF_CSS = `
 .nc-perf-view {
   display: flex;
@@ -284,6 +288,7 @@ export function createPerformancePlugin(): NextConsolePlugin {
   let longTaskObserver: PerformanceObserver | null = null;
   let longTasks: { startTime: number; duration: number }[] = [];
   let customMarks: string[] = [];
+  let nextCustomMarkId = 0;
 
   function render() {
     const metrics = collectCoreMetrics();
@@ -295,16 +300,13 @@ export function createPerformancePlugin(): NextConsolePlugin {
     const sortedLT = [...uniqueLT.values()].sort((a, b) => b.duration - a.duration);
 
     // Resource summary
-    const summary = new Map<string, { count: number; totalSize: number; totalDuration: number }>();
+    const summary = new Map<string, { count: number; totalSize: number }>();
     for (const r of resources) {
-      const s = summary.get(r.type) || { count: 0, totalSize: 0, totalDuration: 0 };
+      const s = summary.get(r.type) || { count: 0, totalSize: 0 };
       s.count++;
       s.totalSize += r.size;
-      s.totalDuration += r.duration;
       summary.set(r.type, s);
     }
-
-    const maxDuration = resources.length > 0 ? Math.max(...resources.map((r) => r.duration), 1) : 1;
 
     // Core metrics cards
     const metricsHTML = metrics.length > 0
@@ -350,7 +352,7 @@ export function createPerformancePlugin(): NextConsolePlugin {
       : '';
 
     // Custom marks
-    const marks = performance.getEntriesByType('mark');
+    const marks = performance.getEntriesByType('mark').slice(-MAX_RENDERED_MARKS);
     const marksHTML = marks.length > 0
       ? marks.map((m) => `
         <tr>
@@ -408,9 +410,13 @@ export function createPerformancePlugin(): NextConsolePlugin {
 
     container.querySelector('.nc-perf-refresh')!.addEventListener('click', render);
     container.querySelector('.nc-perf-mark')!.addEventListener('click', () => {
-      const name = `nc-mark-${customMarks.length + 1}`;
+      const name = `nc-mark-${++nextCustomMarkId}`;
       performance.mark(name);
       customMarks.push(name);
+      if (customMarks.length > MAX_CUSTOM_MARKS) {
+        const expiredMarks = customMarks.splice(0, customMarks.length - MAX_CUSTOM_MARKS);
+        for (const expiredMark of expiredMarks) performance.clearMarks(expiredMark);
+      }
       render();
     });
   }
@@ -424,6 +430,9 @@ export function createPerformancePlugin(): NextConsolePlugin {
         longTaskObserver = new PerformanceObserver((list) => {
           for (const entry of list.getEntries()) {
             longTasks.push({ startTime: entry.startTime, duration: entry.duration });
+          }
+          if (longTasks.length > MAX_LONG_TASKS) {
+            longTasks.splice(0, longTasks.length - MAX_LONG_TASKS);
           }
         });
         longTaskObserver.observe({ type: 'longtask', buffered: true });

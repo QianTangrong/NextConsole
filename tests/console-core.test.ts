@@ -71,4 +71,43 @@ describe('ConsoleCore', () => {
       core.destroy();
     }
   });
+
+  it('releases pending stream work when entries are evicted or cleared', () => {
+    const callbacks = new Map<number, FrameRequestCallback>();
+    let nextHandle = 0;
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      const handle = ++nextHandle;
+      callbacks.set(handle, callback);
+      return handle;
+    });
+    vi.stubGlobal('cancelAnimationFrame', (handle: number) => callbacks.delete(handle));
+
+    const core = new ConsoleCore({
+      captureGlobalErrors: false,
+      hookConsole: false,
+      maxLogs: 1,
+    });
+    const streamUpdate = vi.fn();
+    core.on('streamUpdate', streamUpdate);
+    core.init();
+
+    try {
+      core.appendStream('old', 'first');
+      core.appendStream('old', ' chunk');
+      expect(callbacks.size).toBe(1);
+
+      core.appendStream('current', 'second');
+      expect(core.getEntries().map((entry) => entry.streamId)).toEqual(['current']);
+      expect(callbacks.size).toBe(0);
+
+      core.appendStream('current', ' chunk');
+      expect(callbacks.size).toBe(1);
+      core.clear();
+      expect(callbacks.size).toBe(0);
+      expect(core.getEntries()).toEqual([]);
+      expect(streamUpdate).not.toHaveBeenCalled();
+    } finally {
+      core.destroy();
+    }
+  });
 });

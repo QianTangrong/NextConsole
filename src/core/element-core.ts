@@ -3,6 +3,13 @@
  */
 import { escapeHTML, ncClass } from '../utils/dom';
 
+const MAX_RENDERED_NODES = 2_000;
+
+type RenderBudget = {
+  remaining: number;
+  nextId: number;
+};
+
 /**
  * 生成可折叠 DOM 树，并在用户悬停节点时以独立遮罩高亮对应页面元素。
  */
@@ -26,19 +33,23 @@ export class ElementCore {
 
   /** 从指定根节点生成受最大深度限制的可折叠 DOM 树。 */
   renderTree(root: Element = document.documentElement, maxDepth = 8): string {
-    return this.renderNode(root, 0, maxDepth);
+    return this.renderNode(root, 0, maxDepth, {
+      remaining: MAX_RENDERED_NODES,
+      nextId: 0,
+    });
   }
 
-  /** 递归输出节点 HTML；深度上限防止超大页面生成难以操作的完整树。 */
-  private renderNode(node: Element, depth: number, maxDepth: number): string {
+  /** 递归输出节点 HTML；深度与总节点双上限共同防止超大页面阻塞主线程。 */
+  private renderNode(node: Element, depth: number, maxDepth: number, budget: RenderBudget): string {
     if (depth >= maxDepth) {
       return `<div class="${ncClass('dom-node')}" style="padding-left:${depth * 16}px">...</div>`;
     }
+    budget.remaining -= 1;
 
     const tag = node.tagName.toLowerCase();
     const attrs = this.renderAttributes(node);
     const hasChildren = node.children.length > 0;
-    const id = `nc-dom-${depth}-${tag}-${Math.random().toString(36).slice(2, 8)}`;
+    const id = `nc-dom-${budget.nextId++}`;
     const selector = escapeHTML(this.getSelector(node));
 
     let html = '';
@@ -52,7 +63,11 @@ export class ElementCore {
       html += `</div>`;
       html += `<div class="${ncClass('dom-children')}" id="${id}" style="display:none">`;
       for (let i = 0; i < node.children.length; i++) {
-        html += this.renderNode(node.children[i], depth + 1, maxDepth);
+        if (budget.remaining <= 0) {
+          html += `<div class="${ncClass('dom-node')}" style="padding-left:${(depth + 1) * 16}px">... DOM tree truncated ...</div>`;
+          break;
+        }
+        html += this.renderNode(node.children[i], depth + 1, maxDepth, budget);
       }
       html += `<div class="${ncClass('dom-node')}" style="padding-left:${depth * 16}px">`;
       html += `<span class="${ncClass('dom-tag')}">&lt;/${escapeHTML(tag)}&gt;</span>`;

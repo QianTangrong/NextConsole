@@ -16,6 +16,7 @@ export class StoragePanel {
   private activeType: StorageType | 'all' = 'all';
   private cleanups: (() => void)[] = [];
   private currentEntries: { key: string; value: string; type: StorageType }[] = [];
+  private searchTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(container: HTMLElement, core: StorageCore) {
     this.container = container;
@@ -68,10 +69,10 @@ export class StoragePanel {
 
     // Search
     const searchInput = this.container.querySelector('.nc-storage-search') as HTMLInputElement;
-    let timer: ReturnType<typeof setTimeout>;
     searchInput.addEventListener('input', () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
+      if (this.searchTimer !== null) clearTimeout(this.searchTimer);
+      this.searchTimer = setTimeout(() => {
+        this.searchTimer = null;
         this.searchText = searchInput.value;
         this.refreshTable();
       }, 150);
@@ -249,6 +250,10 @@ export class StoragePanel {
   }
 
   destroy(): void {
+    if (this.searchTimer !== null) {
+      clearTimeout(this.searchTimer);
+      this.searchTimer = null;
+    }
     this.cleanups.forEach((fn) => fn());
     this.cleanups.length = 0;
     this.container.innerHTML = '';

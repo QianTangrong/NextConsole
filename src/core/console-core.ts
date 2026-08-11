@@ -87,11 +87,7 @@ export class ConsoleCore extends EventEmitter<ConsoleEvents> {
     };
 
     this.entries.push(entry);
-
-    // 从最旧记录开始淘汰，避免长时间运行的页面无限占用内存。
-    if (this.entries.length > this.options.maxLogs) {
-      this.entries.splice(0, this.entries.length - this.options.maxLogs);
-    }
+    this.trimEntries();
 
     this.emit('entry', entry);
   }
@@ -161,6 +157,7 @@ export class ConsoleCore extends EventEmitter<ConsoleEvents> {
       };
       this.streamBuffers.set(streamId, entry);
       this.entries.push(entry);
+      this.trimEntries();
       this.emit('entry', entry);
     } else {
       // 同一流只更新首个参数，渲染层可据此稳定复用既有 DOM 行。
@@ -175,6 +172,7 @@ export class ConsoleCore extends EventEmitter<ConsoleEvents> {
     if (entry) {
       entry.streaming = false;
       this.streamBuffers.delete(streamId);
+      this.cancelPendingStreamUpdate(entry);
       this.emit('streamUpdate', entry);
     }
   }
@@ -263,6 +261,7 @@ export class ConsoleCore extends EventEmitter<ConsoleEvents> {
   clear(): void {
     this.entries.length = 0;
     this.streamBuffers.clear();
+    this.cancelPendingStreamUpdate();
     this.emit('clear');
   }
 
@@ -283,11 +282,36 @@ export class ConsoleCore extends EventEmitter<ConsoleEvents> {
     }
     this.originals.clear();
     this.hooked = false;
-    if (this.flushTimer !== null) {
-      cancelAnimationFrame(this.flushTimer);
-    }
-    this.pendingStreamEntries.clear();
+    this.cancelPendingStreamUpdate();
     this.removeAllListeners();
+  }
+
+  /** 统一执行容量淘汰，并同步释放已经不可见的流式状态。 */
+  private trimEntries(): void {
+    const overflow = this.entries.length - this.options.maxLogs;
+    if (overflow <= 0) return;
+
+    const removed = this.entries.splice(0, overflow);
+    for (const entry of removed) {
+      if (entry.streamId && this.streamBuffers.get(entry.streamId) === entry) {
+        this.streamBuffers.delete(entry.streamId);
+      }
+      this.pendingStreamEntries.delete(entry);
+    }
+    if (this.pendingStreamEntries.size === 0) this.cancelPendingStreamUpdate();
+  }
+
+  /** 取消单条或全部待刷新流，防止 clear/end/destroy 后继续派发陈旧更新。 */
+  private cancelPendingStreamUpdate(entry?: LogEntry): void {
+    if (entry) {
+      this.pendingStreamEntries.delete(entry);
+    } else {
+      this.pendingStreamEntries.clear();
+    }
+    if (this.pendingStreamEntries.size === 0 && this.flushTimer !== null) {
+      cancelAnimationFrame(this.flushTimer);
+      this.flushTimer = null;
+    }
   }
 }
 

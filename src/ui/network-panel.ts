@@ -25,6 +25,9 @@ export class NetworkPanel {
   /** 将同一帧内的多次网络更新折叠为一次 DOM 刷新。 */
   private renderRAF: number | null = null;
   private needsRefresh = false;
+  private needsFullRefresh = false;
+  private pendingEntryUpdates = new Map<number, NetworkEntry>();
+  private searchTimer: ReturnType<typeof setTimeout> | null = null;
   private cleanups: (() => void)[] = [];
 
   constructor(container: HTMLElement, core: NetworkCore) {
@@ -81,10 +84,10 @@ export class NetworkPanel {
 
     // Search
     const searchInput = this.container.querySelector('.nc-network-search') as HTMLInputElement;
-    let timer: ReturnType<typeof setTimeout>;
     searchInput.addEventListener('input', () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
+      if (this.searchTimer !== null) clearTimeout(this.searchTimer);
+      this.searchTimer = setTimeout(() => {
+        this.searchTimer = null;
         this.searchText = searchInput.value;
         this.refreshTable();
       }, 150);
@@ -107,25 +110,51 @@ export class NetworkPanel {
     });
 
     // Core events
-    const unsub1 = this.core.on('request', () => this.scheduleRefresh());
-    const unsub2 = this.core.on('update', () => {
-      this.scheduleRefresh();
-      if (this.selectedId && this.isRenderable()) this.showDetail();
+    const unsub1 = this.core.on('request', (entry) => this.scheduleRefresh(entry, true));
+    const unsub2 = this.core.on('update', (entry, requiresTableRebuild) => {
+      this.scheduleRefresh(entry, requiresTableRebuild);
     });
-    const unsub3 = this.core.on('clear', () => this.scheduleRefresh());
+    const unsub3 = this.core.on('clear', () => this.scheduleRefresh(undefined, true));
     this.cleanups.push(unsub1, unsub2, unsub3);
   }
 
-  /** 非活动标签只记录待刷新，避免流式请求在后台反复创建详情节点。 */
-  private scheduleRefresh(): void {
+  /**
+   * 非活动标签只记录待刷新；流式消息仅更新对应行，状态/排序变化才重建完整表格。
+   */
+  private scheduleRefresh(entry?: NetworkEntry, requiresTableRebuild = false): void {
     if (!this.isRenderable()) {
       this.needsRefresh = true;
+      this.needsFullRefresh = true;
+      this.pendingEntryUpdates.clear();
       return;
     }
+
+    if (requiresTableRebuild || !entry) {
+      this.needsFullRefresh = true;
+      this.pendingEntryUpdates.clear();
+    } else if (!this.needsFullRefresh) {
+      this.pendingEntryUpdates.set(entry.id, entry);
+    }
+
     if (this.renderRAF !== null) return;
     this.renderRAF = requestAnimationFrame(() => {
       this.renderRAF = null;
-      this.refreshTable();
+      const shouldRebuild = this.needsFullRefresh;
+      const pendingEntries = [...this.pendingEntryUpdates.values()];
+      this.needsFullRefresh = false;
+      this.pendingEntryUpdates.clear();
+
+      if (shouldRebuild) {
+        this.refreshTable();
+      } else {
+        for (const pendingEntry of pendingEntries) {
+          if (!this.updateTableRow(pendingEntry)) {
+            this.refreshTable();
+            break;
+          }
+        }
+      }
+      if (this.selectedId !== null) this.showDetail();
     });
   }
 
@@ -135,8 +164,10 @@ export class NetworkPanel {
       this.renderRAF = null;
     }
     this.needsRefresh = false;
+    this.needsFullRefresh = false;
+    this.pendingEntryUpdates.clear();
     this.refreshTable();
-    if (this.selectedId) this.showDetail();
+    if (this.selectedId !== null) this.showDetail();
   }
 
   private isRenderable(): boolean {
@@ -192,11 +223,27 @@ export class NetworkPanel {
     this.tableBody.innerHTML = html;
   }
 
+  /** 流式正文或消息数量变化不会影响排序，原地更新对应行即可。 */
+  private updateTableRow(entry: NetworkEntry): boolean {
+    const row = this.tableBody?.querySelector(`tr[data-nc-req-id="${entry.id}"]`);
+    if (!(row instanceof HTMLTableRowElement) || row.cells.length < 5) return false;
+
+    const statusClass = entry.pending ? 'nc-status-pending' : entry.status >= 400 ? 'nc-status-err' : 'nc-status-ok';
+    const msgCount = entry.messages && entry.messages.length > 0 ? ` (${entry.messages.length})` : '';
+    row.cells[2].className = statusClass;
+    row.cells[2].textContent = entry.pending ? '⏳' : String(entry.status);
+    row.cells[3].textContent = `${entry.type}${msgCount}`;
+    row.cells[4].textContent = entry.pending
+      ? (entry.type === 'sse' || entry.type === 'websocket' ? '●' : '-')
+      : formatDuration(entry.duration);
+    return true;
+  }
+
   /** 按当前选中条目构建详情；响应体和实时消息均通过转义后的展示工具输出。 */
   private showDetail(): void {
     if (!this.detailEl || !this.selectedId) return;
 
-    const entry = this.core.getEntries().find((e) => e.id === this.selectedId);
+    const entry = this.core.getEntries().find((item) => item.id === this.selectedId);
     if (!entry) {
       this.detailEl.style.display = 'none';
       return;
@@ -307,6 +354,11 @@ export class NetworkPanel {
     if (this.renderRAF !== null) {
       cancelAnimationFrame(this.renderRAF);
     }
+    if (this.searchTimer !== null) {
+      clearTimeout(this.searchTimer);
+      this.searchTimer = null;
+    }
+    this.pendingEntryUpdates.clear();
     this.cleanups.forEach((fn) => fn());
     this.cleanups.length = 0;
     this.container.innerHTML = '';

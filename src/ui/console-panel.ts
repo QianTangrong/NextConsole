@@ -24,6 +24,8 @@ export class ConsolePanel {
   /** 高频日志更新合并到动画帧中，非可见面板仅标记待刷新状态。 */
   private renderRAF: number | null = null;
   private needsRefresh = false;
+  private searchTimer: ReturnType<typeof setTimeout> | null = null;
+  private feedbackTimer: number | null = null;
   private cleanups: (() => void)[] = [];
 
   constructor(
@@ -85,10 +87,10 @@ export class ConsolePanel {
 
     // Search
     const searchInput = this.toolbarEl.querySelector('.nc-console-search') as HTMLInputElement;
-    let searchTimer: ReturnType<typeof setTimeout>;
     searchInput.addEventListener('input', () => {
-      clearTimeout(searchTimer);
-      searchTimer = setTimeout(() => {
+      if (this.searchTimer !== null) clearTimeout(this.searchTimer);
+      this.searchTimer = setTimeout(() => {
+        this.searchTimer = null;
         this.searchText = searchInput.value;
         this.refreshEntries();
       }, 150);
@@ -214,7 +216,9 @@ export class ConsolePanel {
     button.disabled = true;
     const copied = await this.copyForAI();
     button.textContent = copied ? 'Copied' : 'Copy failed';
-    window.setTimeout(() => {
+    if (this.feedbackTimer !== null) window.clearTimeout(this.feedbackTimer);
+    this.feedbackTimer = window.setTimeout(() => {
+      this.feedbackTimer = null;
       button.disabled = false;
       button.textContent = originalLabel;
     }, 1_500);
@@ -223,6 +227,14 @@ export class ConsolePanel {
   destroy(): void {
     if (this.renderRAF !== null) {
       cancelAnimationFrame(this.renderRAF);
+    }
+    if (this.searchTimer !== null) {
+      clearTimeout(this.searchTimer);
+      this.searchTimer = null;
+    }
+    if (this.feedbackTimer !== null) {
+      window.clearTimeout(this.feedbackTimer);
+      this.feedbackTimer = null;
     }
     this.cleanups.forEach((fn) => fn());
     this.cleanups.length = 0;
