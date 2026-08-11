@@ -1,10 +1,13 @@
 /**
- * NextConsole 的公共入口：导出类型、内置插件和控制台实例 API。
+ * Full compatibility entry. It retains the convenience Mimo configuration and
+ * plugin factory re-exports. New integrations should prefer `nconsole/lite`,
+ * `nconsole/core`, and `nconsole/plugins/*` to import only what they use.
  */
-import type { NextConsoleConfig, PanelTab, LogLevel, LogEntry, NetworkEntry, NextConsolePlugin } from './types';
-import { MainPanel } from './ui/main-panel';
+import type { NextConsoleConfig } from './types';
+import { createMimoAIDiagnosisPlugin } from './plugins/mimo-ai-diagnosis-plugin';
+import { NextConsole as LiteNextConsole } from './runtime/next-console';
 
-export type { NextConsoleConfig, PanelTab, LogLevel, LogEntry, NetworkEntry, NextConsolePlugin };
+export type { NextConsoleConfig, PanelTab, LogLevel, LogEntry, NetworkEntry, NextConsolePlugin } from './types';
 export type {
   ConsoleOptions,
   LogSource,
@@ -30,150 +33,19 @@ export { createSourcePlugin } from './plugins/source-plugin';
 export { createPerformancePlugin } from './plugins/performance-plugin';
 export { createMimoAIDiagnosisPlugin } from './plugins/mimo-ai-diagnosis-plugin';
 
-/** Track singleton instance to prevent multiple hook conflicts */
-let _instance: NextConsole | null = null;
-
 /**
- * NextConsole - Next-generation front-end debugging console.
- *
- * @example
- * ```js
- * import NextConsole from 'nconsole';
- *
- * const nc = new NextConsole();
- * nc.show();
- *
- * // AI streaming log
- * nc.appendStream('stream-1', 'Hello ');
- * nc.appendStream('stream-1', 'world!');
- * nc.endStream('stream-1');
- *
- * // Cleanup
- * nc.destroy();
- * ```
+ * Full NextConsole runtime. This preserves the existing `mimoDiagnosis`
+ * convenience option while delegating the plugin-free UI to the Lite runtime.
  */
-export class NextConsole {
-  private panel: MainPanel;
+export class NextConsole extends LiteNextConsole {
+  constructor(config: NextConsoleConfig = {}) {
+    const { mimoDiagnosis, ...coreConfig } = config;
+    const initialPlugins = mimoDiagnosis?.enabled
+      ? [createMimoAIDiagnosisPlugin(mimoDiagnosis)]
+      : [];
 
-  constructor(config?: NextConsoleConfig) {
-    // Auto-destroy previous instance to prevent hook conflicts
-    if (_instance) {
-      _instance.destroy();
-    }
-    _instance = this;
-    this.panel = new MainPanel(config);
-    this.panel.init();
-  }
-
-  /** Show the debugging panel */
-  show(): void {
-    this.panel.show();
-  }
-
-  /** Hide the debugging panel */
-  hide(): void {
-    this.panel.hide();
-  }
-
-  /** Toggle panel visibility */
-  toggle(): void {
-    this.panel.toggle();
-  }
-
-  /** Check if the panel is currently visible */
-  get isVisible(): boolean {
-    return this.panel.isVisible();
-  }
-
-  /**
-   * Append a chunk to an AI streaming log.
-   * Call with the same streamId to update the entry in-place.
-   */
-  appendStream(streamId: string, chunk: string): void {
-    this.panel.getConsoleCore().appendStream(streamId, chunk);
-  }
-
-  /** Mark a streaming log as complete */
-  endStream(streamId: string): void {
-    this.panel.getConsoleCore().endStream(streamId);
-  }
-
-  /** Set theme at runtime */
-  setTheme(theme: 'dark' | 'light'): void {
-    this.panel.setTheme(theme);
-  }
-
-  /** Clear all console logs */
-  clearConsole(): void {
-    this.panel.getConsoleCore().clear();
-  }
-
-  /** Clear all network entries */
-  clearNetwork(): void {
-    this.panel.getNetworkCore().clear();
-  }
-
-  /** Export console logs as JSON string */
-  exportLogs(): string {
-    return this.panel.getConsoleCore().exportJSON();
-  }
-
-  /** 导出当前报错、关联网络活动和脱敏 DOM 快照组成的 Markdown。 */
-  exportForAI(): string {
-    return this.panel.exportForAI();
-  }
-
-  /** 将当前 AI 排障 Markdown 复制到剪贴板。 */
-  copyForAI(): Promise<boolean> {
-    return this.panel.copyForAI();
-  }
-
-  /** Get all captured console log entries */
-  getLogEntries(): LogEntry[] {
-    return this.panel.getConsoleCore().getEntries();
-  }
-
-  /** Get all captured network entries */
-  getNetworkEntries(): NetworkEntry[] {
-    return this.panel.getNetworkCore().getEntries();
-  }
-
-  /**
-   * Register a plugin.
-   *
-   * @example
-   * ```js
-   * nc.use({
-   *   name: 'my-plugin',
-   *   tab: {
-   *     label: 'My Tab',
-   *     render(container, api) {
-   *       container.innerHTML = '<div>Hello from plugin!</div>';
-   *     },
-   *   },
-   *   init(api) {
-   *     api.log('Plugin loaded!');
-   *   },
-   * });
-   * ```
-   */
-  use(plugin: NextConsolePlugin): this {
-    this.panel.use(plugin);
-    return this;
-  }
-
-  /**
-   * Completely destroy NextConsole.
-   * Restores original console, fetch, XHR, and EventSource.
-   * Safe to call in production to remove all traces.
-   */
-  destroy(): void {
-    if (_instance === this) {
-      _instance = null;
-    }
-    this.panel.destroy();
+    super(coreConfig, initialPlugins);
   }
 }
 
-// Default export
 export default NextConsole;

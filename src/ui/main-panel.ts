@@ -1,7 +1,7 @@
 /**
  * 调试器主容器：创建 Shadow DOM，协调各核心模块、内置面板、插件和整体生命周期。
  */
-import type { PanelTab, NextConsoleConfig, NextConsolePlugin, PluginAPI } from '../types';
+import type { PanelTab, NextConsoleCoreConfig, NextConsolePlugin, PluginAPI } from '../types';
 import { ConsoleCore } from '../core/console-core';
 import { NetworkCore } from '../core/network-core';
 import { StorageCore } from '../core/storage-core';
@@ -14,7 +14,6 @@ import { StoragePanel } from './storage-panel';
 import { ElementPanel } from './element-panel';
 import { SystemPanel } from './system-panel';
 import { ReplPanel } from './repl-panel';
-import { createMimoAIDiagnosisPlugin } from '../plugins/mimo-ai-diagnosis-plugin';
 import { THEME_CSS } from '../styles/theme';
 import { createAIExport } from '../utils/ai-export';
 import { on, clamp } from '../utils/dom';
@@ -67,9 +66,9 @@ export class MainPanel {
   private initialized = false;
 
   // Config
-  private config: NextConsoleConfig;
+  private config: NextConsoleCoreConfig;
 
-  constructor(config: NextConsoleConfig = {}) {
+  constructor(config: NextConsoleCoreConfig = {}) {
     this.config = config;
     this.activeTab = config.defaultTab || 'console';
 
@@ -86,9 +85,6 @@ export class MainPanel {
     this.replCore = new ReplCore();
 
     // 默认不加载，避免未启用时出现额外 Tab、监听或诊断数据收集。
-    if (config.mimoDiagnosis?.enabled) {
-      this.plugins.push(createMimoAIDiagnosisPlugin(config.mimoDiagnosis));
-    }
   }
 
   /** 初始化核心模块与界面；挂载函数可等待 DOM 就绪后安全执行。 */

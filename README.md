@@ -108,6 +108,42 @@ nc.setTheme('light');
 nc.toggle();
 ```
 
+## Lite, Core, and Optional Plugins
+
+The legacy `nconsole` entry remains fully compatible and includes the built-in
+plugin factories. New integrations can select a smaller public entry instead:
+
+```js
+// Full Shadow DOM UI, without any optional plugin implementation.
+import NextConsole from 'nconsole/lite';
+
+// Each optional feature is a separate import and is only included when used.
+import { createPerformancePlugin } from 'nconsole/plugins/performance';
+
+const nc = new NextConsole();
+nc.use(createPerformancePlugin());
+```
+
+For a custom UI, import only the capture primitives. This `core` entry has no
+Shadow DOM panels and no plugin implementations:
+
+```js
+import { ConsoleCore, NetworkCore, StorageCore } from 'nconsole/core';
+
+const consoleCore = new ConsoleCore();
+const networkCore = new NetworkCore();
+consoleCore.init();
+networkCore.init();
+```
+
+Available optional plugin entries are `nconsole/plugins/source`,
+`nconsole/plugins/performance`, and `nconsole/plugins/mimo-ai-diagnosis`.
+For a classic script tag without optional plugins, load
+`dist/nextconsole.lite.min.js` instead of `dist/nextconsole.min.js`.
+
+Every public build artifact is checked by `npm run check:bundle`; the limits
+are versioned in `bundle-budget.json` and include both raw and gzip sizes.
+
 ## AI Streaming Logs
 
 NextConsole has first-class support for AI/LLM streaming output:

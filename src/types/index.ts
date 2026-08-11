@@ -10,7 +10,7 @@ import type { StorageOptions } from './storage';
 export type PanelTab = 'console' | 'network' | 'storage' | 'element' | 'system' | 'repl';
 
 /** NextConsole configuration */
-export interface NextConsoleConfig {
+export interface NextConsoleCoreConfig {
   /** Target element to mount to (default: document.body) */
   target?: HTMLElement;
   /** Default active tab */
@@ -28,12 +28,22 @@ export interface NextConsoleConfig {
   /** Storage panel options */
   storage?: Partial<StorageOptions>;
   /** 小米 AI 错误诊断。默认关闭，开启后仅在用户手动点击分析时发送脱敏快照。 */
-  mimoDiagnosis?: MimoAIDiagnosisOptions;
   /** Callback when NextConsole is ready */
   onReady?: () => void;
 }
 
 /** Event types emitted by NextConsole */
+/**
+ * Backward-compatible configuration exposed by the full package entry.
+ * The `mimoDiagnosis` convenience option is intentionally excluded from Lite.
+ */
+export interface NextConsoleConfig extends NextConsoleCoreConfig {
+  mimoDiagnosis?: MimoAIDiagnosisOptions;
+}
+
+/** Configuration accepted by the Lite UI entry. */
+export type NextConsoleLiteConfig = NextConsoleCoreConfig;
+
 export interface NextConsoleEvents {
   log: (entry: import('./console').LogEntry) => void;
   network: (entry: import('./network').NetworkEntry) => void;
