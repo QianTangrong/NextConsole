@@ -1,5 +1,5 @@
 /** 注入 Shadow DOM 的主题变量与基础样式，所有界面样式均以 nc 前缀隔离。 */
-export const THEME_CSS = `
+export const THEME_CSS: string = `
 :host {
   --nc-bg: #1e1e1e;
   --nc-bg-secondary: #252526;

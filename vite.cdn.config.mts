@@ -7,6 +7,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   build: {
+    copyPublicDir: false,
     // Preserve the ES, UMD, and declaration files created by the library build.
     emptyOutDir: false,
     lib: {

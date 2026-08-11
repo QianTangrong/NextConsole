@@ -27,6 +27,7 @@ export default defineConfig({
     },
   },
   build: {
+    copyPublicDir: false,
     lib: {
       entry: resolve(__dirname, 'src/index.ts'),
       name: 'NextConsole',
@@ -40,6 +41,7 @@ export default defineConfig({
       },
     },
     target: 'es2020',
-    sourcemap: true,
+    // 发布包排除 .map，隐藏映射注释可避免产物引用不存在的文件。
+    sourcemap: 'hidden',
   },
 });
