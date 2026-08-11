@@ -1,5 +1,5 @@
 /**
- * 小米 AI 诊断插件：从已采集的错误、网络活动和脱敏运行上下文生成可控的诊断请求。
+ * AI 诊断插件：通过固定的 NewAPI 兼容接口，将已脱敏的错误上下文转换为诊断请求。
  */
 import type {
   LogEntry,
@@ -16,7 +16,7 @@ import type {
 const MIMO_BASE_URL = 'https://ai-api.libsou.com';
 // NewAPI 使用 OpenAI 兼容接口，/v1 只是 API 基地址，实际对话请求需要追加 chat/completions。
 const MIMO_CHAT_URL = `${MIMO_BASE_URL}/v1/chat/completions`;
-const MIMO_MODEL = 'mimo-v2.5-pro';
+const MIMO_MODEL = 'deepseek-v4-flash';
 // 部分 NewAPI 路由会先返回 reasoning_content；保留足够额度，避免推理完成前截断最终 JSON。
 const MAX_COMPLETION_TOKENS = 4096;
 const MAX_RECENT_LOGS = 12;

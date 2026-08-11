@@ -35,7 +35,7 @@ export interface MimoDiagnosisContextProviderInput {
 /** 业务侧可补充的、可序列化的诊断上下文。 */
 export type MimoDiagnosisContext = Record<string, unknown>;
 
-/** 小米 AI 诊断配置。 */
+/** AI 诊断配置；名称为兼容既有公开 API 而保留。 */
 export interface MimoAIDiagnosisOptions {
   /** 默认 false；关闭时不注册 AI 诊断 Tab，也不会采集或发送额外数据。 */
   enabled?: boolean;

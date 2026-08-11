@@ -130,9 +130,9 @@ nc.endStream('chat-1');
 
 即使面对数千次高频更新，也能通过 `requestAnimationFrame` 批量渲染避免 UI 卡顿。
 
-## 小米 AI 错误诊断（开发调试）
+## NewAPI AI 错误诊断（开发调试）
 
-默认关闭。启用后会新增“AI 诊断”标签页，开发者在该页临时输入小米 API Key，再对某一条 `console.error`、未处理的运行时异常或未处理 Promise 拒绝手动发起诊断。Key 只保留在输入框内，不会写入配置、Storage 或日志；刷新页面或销毁实例后失效。
+默认关闭。启用后会新增“AI 诊断”标签页，开发者在该页临时输入 NewAPI API Key，再对某一条 `console.error`、未处理的运行时异常或未处理 Promise 拒绝手动发起诊断。Key 只保留在输入框内，不会写入配置、Storage 或日志；刷新页面或销毁实例后失效。为兼容既有公开 API，配置项和插件子路径仍保留 `mimoDiagnosis` / `mimo-ai-diagnosis` 命名。
 
 ```ts
 const nc = new Nconsole({
@@ -147,7 +147,7 @@ const nc = new Nconsole({
 });
 ```
 
-该功能固定调用 `https://token-plan-cn.xiaomimimo.com/v1/chat/completions` 与 `mimo-v2.5-pro`，使用请求头 `api-key`。发送给模型的是经脱敏和限长处理的错误栈、近期控制台记录、关联网络状态、页面运行环境及 `contextProvider` 返回值；不会发送请求头、请求/响应 body、Cookie、浏览器存储或 URL 查询参数。诊断请求本身也不会出现在 Network 面板。
+该功能固定调用 NewAPI 兼容接口 `https://ai-api.libsou.com/v1/chat/completions` 与 `deepseek-v4-flash`，使用 `Authorization: Bearer <API Key>` 认证。发送给模型的是经脱敏和限长处理的错误栈、近期控制台记录、关联网络状态、页面运行环境及 `contextProvider` 返回值；不会发送请求头、请求/响应 body、Cookie、浏览器存储或 URL 查询参数。诊断请求本身也不会出现在 Network 面板。
 
 这是浏览器直连模式，Key 会暴露给当前页面运行环境，因此仅适用于开发调试。服务端不允许跨域时，浏览器无法直接调用。
 

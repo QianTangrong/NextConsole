@@ -92,6 +92,24 @@ describe('release metadata', () => {
 
     expect(source).not.toMatch(/['"`]sk-[A-Za-z0-9_-]{16,}['"`]/);
   });
+
+  it('keeps the documented AI diagnosis destination aligned with the runtime', () => {
+    const source = readFileSync(
+      resolve(root, 'src/plugins/mimo-ai-diagnosis-plugin.ts'),
+      'utf8',
+    );
+    const readme = readFileSync(resolve(root, 'README.zh-CN.md'), 'utf8');
+    const baseUrl = source.match(/const MIMO_BASE_URL = '([^']+)'/)?.[1];
+    const model = source.match(/const MIMO_MODEL = '([^']+)'/)?.[1];
+
+    expect(baseUrl).toBeTruthy();
+    expect(model).toBeTruthy();
+    expect(readme).toContain(`${baseUrl}/v1/chat/completions`);
+    expect(readme).toContain(model);
+    expect(readme).toContain('Authorization: Bearer <API Key>');
+    expect(readme).not.toContain('token-plan-cn.xiaomimimo.com');
+    expect(readme).not.toContain('使用请求头 `api-key`');
+  });
 });
 
 function readJSON<T>(file: string): T {
