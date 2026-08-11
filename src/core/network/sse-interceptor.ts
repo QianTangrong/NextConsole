@@ -1,5 +1,10 @@
 import type { NetworkEntry, SSEEvent, StreamMessage } from '../../types';
 import { nextId } from '../../utils/time';
+import {
+  createGlobalHook,
+  detachGlobalHook,
+  type GlobalHookHandle,
+} from '../global-hook';
 import { finishNetworkEntry, type NetworkCaptureSink } from './network-capture';
 
 function getEventCapture(options?: boolean | AddEventListenerOptions | EventListenerOptions): boolean {
@@ -8,7 +13,7 @@ function getEventCapture(options?: boolean | AddEventListenerOptions | EventList
 
 /** 代理 EventSource 构造与自定义事件监听，并独立拥有恢复边界。 */
 export class SSEInterceptor {
-  private originalEventSource: typeof EventSource | null = null;
+  private eventSourceHook: GlobalHookHandle<typeof EventSource> | null = null;
   private active = false;
 
   constructor(private readonly sink: NetworkCaptureSink) {}
@@ -16,14 +21,16 @@ export class SSEInterceptor {
   install(): void {
     if (this.active || typeof window.EventSource === 'undefined') return;
 
-    const OriginalEventSource = window.EventSource;
     const self = this;
-    const ProxiedEventSource = function (
+    const eventSourceHook = createGlobalHook(window.EventSource, (link) => function (
       this: EventSource,
       url: string | URL,
       init?: EventSourceInit,
     ) {
-      const eventSource = new OriginalEventSource(url, init);
+      const CurrentEventSource = link.previous;
+      if (!link.active) return new CurrentEventSource(url, init);
+
+      const eventSource = new CurrentEventSource(url, init);
       const entry: NetworkEntry = {
         id: nextId(),
         type: 'sse',
@@ -139,25 +146,27 @@ export class SSEInterceptor {
       });
 
       return eventSource;
-    } as unknown as typeof EventSource;
+    } as unknown as typeof EventSource);
 
-    Object.defineProperties(ProxiedEventSource, {
-      CONNECTING: { value: OriginalEventSource.CONNECTING },
-      OPEN: { value: OriginalEventSource.OPEN },
-      CLOSED: { value: OriginalEventSource.CLOSED },
-      prototype: { value: OriginalEventSource.prototype },
+    Object.defineProperties(eventSourceHook.hook, {
+      CONNECTING: { value: window.EventSource.CONNECTING },
+      OPEN: { value: window.EventSource.OPEN },
+      CLOSED: { value: window.EventSource.CLOSED },
+      prototype: { value: window.EventSource.prototype },
     });
 
-    this.originalEventSource = OriginalEventSource;
+    this.eventSourceHook = eventSourceHook;
     this.active = true;
-    window.EventSource = ProxiedEventSource;
+    window.EventSource = eventSourceHook.hook;
   }
 
   restore(): void {
     if (!this.active) return;
     this.active = false;
-    if (this.originalEventSource) window.EventSource = this.originalEventSource;
-    this.originalEventSource = null;
+    if (this.eventSourceHook) {
+      window.EventSource = detachGlobalHook(window.EventSource, this.eventSourceHook);
+      this.eventSourceHook = null;
+    }
   }
 
   private captureMessage(entry: NetworkEntry, event: MessageEvent, eventName?: string): void {

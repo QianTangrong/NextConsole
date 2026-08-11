@@ -133,6 +133,67 @@ describe('NetworkCore', () => {
     expect(window.fetch).toBe(nativeFetch);
   });
 
+  it('keeps nested fetch hooks isolated across out-of-order destroy', async () => {
+    const nativeFetch = vi.fn(async () => new Response(null, { status: 204 }));
+    const { window } = installWindow({ fetch: nativeFetch as typeof fetch });
+    const options = {
+      hookFetch: true,
+      hookXHR: false,
+      hookSSE: false,
+      hookWebSocket: false,
+      maxRequests: 10,
+    };
+    const first = new NetworkCore(options);
+    const second = new NetworkCore(options);
+
+    try {
+      first.init();
+      second.init();
+      await window.fetch('/captured-by-both');
+      expect(first.getEntries()).toHaveLength(1);
+      expect(second.getEntries()).toHaveLength(1);
+
+      first.destroy();
+      await window.fetch('/captured-by-second');
+      expect(first.getEntries()).toHaveLength(1);
+      expect(second.getEntries()).toHaveLength(2);
+
+      second.destroy();
+      expect(window.fetch).toBe(nativeFetch);
+      await window.fetch('/native-only');
+      expect(first.getEntries()).toHaveLength(1);
+      expect(second.getEntries()).toHaveLength(2);
+      expect(nativeFetch).toHaveBeenCalledTimes(3);
+    } finally {
+      first.destroy();
+      second.destroy();
+    }
+  });
+
+  it('preserves a third-party fetch hook installed after NetworkCore', async () => {
+    const nativeFetch = vi.fn(async () => new Response(null, { status: 204 }));
+    const { window } = installWindow({ fetch: nativeFetch as typeof fetch });
+    const core = new NetworkCore({
+      hookFetch: true,
+      hookXHR: false,
+      hookSSE: false,
+      hookWebSocket: false,
+      maxRequests: 10,
+    });
+
+    core.init();
+    const nconsoleFetch = window.fetch;
+    const thirdPartyFetch = vi.fn((...args: Parameters<typeof fetch>) => nconsoleFetch(...args));
+    window.fetch = thirdPartyFetch as typeof fetch;
+    core.destroy();
+
+    expect(window.fetch).toBe(thirdPartyFetch);
+    await window.fetch('/third-party-only');
+    expect(thirdPartyFetch).toHaveBeenCalledOnce();
+    expect(nativeFetch).toHaveBeenCalledOnce();
+    expect(core.getEntries()).toEqual([]);
+  });
+
   it('applies fetch ignore rules before reading request metadata', async () => {
     const nativeFetch = vi.fn(async () => new Response(null, { status: 204 }));
     const { window } = installWindow({ fetch: nativeFetch as typeof fetch });

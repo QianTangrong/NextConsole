@@ -1,5 +1,10 @@
 import type { NetworkEntry } from '../../types';
 import { nextId } from '../../utils/time';
+import {
+  createGlobalHook,
+  detachGlobalHook,
+  type GlobalHookHandle,
+} from '../global-hook';
 import { serializeBody, serializeXHRResponse } from './body-serialization';
 import { finishNetworkEntry, type NetworkCaptureSink } from './network-capture';
 
@@ -10,9 +15,9 @@ type TrackedXMLHttpRequest = XMLHttpRequest & {
 
 /** 独立接管并恢复 XHR 原型方法。 */
 export class XHRInterceptor {
-  private originalOpen: typeof XMLHttpRequest.prototype.open | null = null;
-  private originalSend: typeof XMLHttpRequest.prototype.send | null = null;
-  private originalSetRequestHeader: typeof XMLHttpRequest.prototype.setRequestHeader | null = null;
+  private openHook: GlobalHookHandle<typeof XMLHttpRequest.prototype.open> | null = null;
+  private sendHook: GlobalHookHandle<typeof XMLHttpRequest.prototype.send> | null = null;
+  private setRequestHeaderHook: GlobalHookHandle<typeof XMLHttpRequest.prototype.setRequestHeader> | null = null;
   private active = false;
 
   constructor(private readonly sink: NetworkCaptureSink) {}
@@ -20,16 +25,15 @@ export class XHRInterceptor {
   install(): void {
     if (this.active) return;
 
-    const originalOpen = XMLHttpRequest.prototype.open;
-    const originalSend = XMLHttpRequest.prototype.send;
-    const originalSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
     const self = this;
 
-    const installedOpen = function (
+    const openHook = createGlobalHook(XMLHttpRequest.prototype.open, (link) => function (
       this: TrackedXMLHttpRequest,
       method: string,
       url: string | URL,
     ) {
+      if (!link.active) return link.previous.apply(this, arguments as any);
+
       this._nc_headers = {};
       this._nc_entry = {
         id: nextId(),
@@ -48,22 +52,28 @@ export class XHRInterceptor {
         pending: true,
       };
 
-      return originalOpen.apply(this, arguments as any);
-    } as typeof XMLHttpRequest.prototype.open;
+      return link.previous.apply(this, arguments as any);
+    } as typeof XMLHttpRequest.prototype.open);
 
-    const installedSetRequestHeader = function (
+    const setRequestHeaderHook = createGlobalHook(
+      XMLHttpRequest.prototype.setRequestHeader,
+      (link) => function (
       this: TrackedXMLHttpRequest,
       name: string,
       value: string,
     ) {
+      if (!link.active) return link.previous.call(this, name, value);
       if (this._nc_headers) this._nc_headers[name] = value;
-      return originalSetRequestHeader.call(this, name, value);
-    } as typeof XMLHttpRequest.prototype.setRequestHeader;
+      return link.previous.call(this, name, value);
+    } as typeof XMLHttpRequest.prototype.setRequestHeader,
+    );
 
-    const installedSend = function (
+    const sendHook = createGlobalHook(XMLHttpRequest.prototype.send, (link) => function (
       this: TrackedXMLHttpRequest,
       body?: Document | XMLHttpRequestBodyInit | null,
     ) {
+      if (!link.active) return link.previous.call(this, body);
+
       const entry = this._nc_entry;
       if (entry && self.active) {
         entry.startTime = performance.now();
@@ -98,31 +108,37 @@ export class XHRInterceptor {
         });
       }
 
-      return originalSend.call(this, body);
-    } as typeof XMLHttpRequest.prototype.send;
+      return link.previous.call(this, body);
+    } as typeof XMLHttpRequest.prototype.send);
 
-    this.originalOpen = originalOpen;
-    this.originalSend = originalSend;
-    this.originalSetRequestHeader = originalSetRequestHeader;
+    this.openHook = openHook;
+    this.sendHook = sendHook;
+    this.setRequestHeaderHook = setRequestHeaderHook;
     this.active = true;
 
-    XMLHttpRequest.prototype.open = installedOpen;
-    XMLHttpRequest.prototype.send = installedSend;
-    XMLHttpRequest.prototype.setRequestHeader = installedSetRequestHeader;
+    XMLHttpRequest.prototype.open = openHook.hook;
+    XMLHttpRequest.prototype.send = sendHook.hook;
+    XMLHttpRequest.prototype.setRequestHeader = setRequestHeaderHook.hook;
   }
 
   restore(): void {
     if (!this.active) return;
     this.active = false;
 
-    if (this.originalOpen) XMLHttpRequest.prototype.open = this.originalOpen;
-    if (this.originalSend) XMLHttpRequest.prototype.send = this.originalSend;
-    if (this.originalSetRequestHeader) {
-      XMLHttpRequest.prototype.setRequestHeader = this.originalSetRequestHeader;
+    if (this.openHook) {
+      XMLHttpRequest.prototype.open = detachGlobalHook(XMLHttpRequest.prototype.open, this.openHook);
+      this.openHook = null;
     }
-
-    this.originalOpen = null;
-    this.originalSend = null;
-    this.originalSetRequestHeader = null;
+    if (this.sendHook) {
+      XMLHttpRequest.prototype.send = detachGlobalHook(XMLHttpRequest.prototype.send, this.sendHook);
+      this.sendHook = null;
+    }
+    if (this.setRequestHeaderHook) {
+      XMLHttpRequest.prototype.setRequestHeader = detachGlobalHook(
+        XMLHttpRequest.prototype.setRequestHeader,
+        this.setRequestHeaderHook,
+      );
+      this.setRequestHeaderHook = null;
+    }
   }
 }

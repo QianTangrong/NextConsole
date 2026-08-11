@@ -4,6 +4,11 @@
 import type { LogEntry, LogLevel, LogSource, ConsoleOptions } from '../types';
 import { EventEmitter } from '../utils/event-emitter';
 import { nextId } from '../utils/time';
+import {
+  createGlobalHook,
+  detachGlobalHook,
+  type GlobalHookHandle,
+} from './global-hook';
 
 type ConsoleEvents = {
   entry: (entry: LogEntry) => void;
@@ -19,6 +24,7 @@ const DEFAULT_OPTIONS: ConsoleOptions = {
 
 /** 所有被接管的方法都在此白名单中，销毁时按同一列表精确恢复。 */
 const LOG_LEVELS: LogLevel[] = ['log', 'info', 'warn', 'error', 'debug'];
+type ConsoleMethod = (...args: unknown[]) => void;
 
 /**
    * 接管 window.console 并采集日志条目，同时支持 AI 流式日志的原地追加。
@@ -26,8 +32,8 @@ const LOG_LEVELS: LogLevel[] = ['log', 'info', 'warn', 'error', 'debug'];
 export class ConsoleCore extends EventEmitter<ConsoleEvents> {
   private entries: LogEntry[] = [];
   private options: ConsoleOptions;
-  /** 保存已绑定 this 的原始 console 方法，确保销毁后不遗留代理。 */
-  private originals = new Map<LogLevel, (...args: unknown[]) => void>();
+  /** 保存每个 console 包装器的链路句柄，支持多个 Core 乱序销毁。 */
+  private consoleHooks = new Map<LogLevel, GlobalHookHandle<ConsoleMethod>>();
   private hooked = false;
   private globalErrorsBound = false;
   /** 以业务流 ID 合并分块消息，避免每个 token 都成为单独的日志条目。 */
@@ -44,24 +50,30 @@ export class ConsoleCore extends EventEmitter<ConsoleEvents> {
   init(): void {
     if (this.hooked) return;
 
-    if (this.options.hookConsole) {
-      for (const level of LOG_LEVELS) {
-        const original = console[level].bind(console);
-        this.originals.set(level, original);
-
-        console[level] = (...args: unknown[]) => {
-          // 先调用原方法，保证浏览器 DevTools 的可观测性不因采集而改变。
-          original(...args);
-          this.addEntry(level, args);
-        };
+    try {
+      if (this.options.hookConsole) {
+        for (const level of LOG_LEVELS) {
+          const hook = createGlobalHook(console[level] as ConsoleMethod, (link) => (...args: unknown[]) => {
+            // 先调用原方法，保证浏览器 DevTools 的可观测性不因采集而改变。
+            Reflect.apply(link.previous, console, args);
+            if (link.active) this.addEntry(level, args);
+          });
+          this.consoleHooks.set(level, hook);
+          console[level] = hook.hook as typeof console.log;
+        }
       }
-    }
 
-    if (this.options.captureGlobalErrors) {
-      this.bindGlobalErrorListeners();
-    }
+      if (this.options.captureGlobalErrors) {
+        this.bindGlobalErrorListeners();
+      }
 
-    this.hooked = true;
+      this.hooked = true;
+    } catch (error) {
+      // 任一安装步骤失败时立即撤销已经完成的 Hook，避免留下半初始化的全局状态。
+      this.unbindGlobalErrorListeners();
+      this.restoreConsoleHooks();
+      throw error;
+    }
   }
 
   /** 规范化并写入日志条目，同时维持配置的内存上限。 */
@@ -96,7 +108,12 @@ export class ConsoleCore extends EventEmitter<ConsoleEvents> {
   private bindGlobalErrorListeners(): void {
     if (this.globalErrorsBound) return;
     window.addEventListener('error', this.handleWindowError);
-    window.addEventListener('unhandledrejection', this.handleUnhandledRejection);
+    try {
+      window.addEventListener('unhandledrejection', this.handleUnhandledRejection);
+    } catch (error) {
+      window.removeEventListener('error', this.handleWindowError);
+      throw error;
+    }
     this.globalErrorsBound = true;
   }
 
@@ -272,18 +289,31 @@ export class ConsoleCore extends EventEmitter<ConsoleEvents> {
 
   /** 恢复所有原生监听与 console 方法，释放调试器运行期资源。 */
   destroy(): void {
-    if (!this.hooked) return;
+    if (!this.hooked && this.consoleHooks.size === 0 && !this.globalErrorsBound) return;
     this.unbindGlobalErrorListeners();
-    for (const level of LOG_LEVELS) {
-      const original = this.originals.get(level);
-      if (original) {
-        console[level] = original as typeof console.log;
-      }
-    }
-    this.originals.clear();
+    this.restoreConsoleHooks();
     this.hooked = false;
     this.cancelPendingStreamUpdate();
     this.removeAllListeners();
+  }
+
+  /** 按当前全局链路逐个摘除本实例安装的 console 包装器。 */
+  private restoreConsoleHooks(): void {
+    for (const level of LOG_LEVELS) {
+      const hook = this.consoleHooks.get(level);
+      if (hook) {
+        const current = console[level] as ConsoleMethod;
+        const restored = detachGlobalHook(current, hook);
+        if (restored !== current) {
+          try {
+            console[level] = restored as typeof console.log;
+          } catch {
+            // 属性被外部冻结时无法换回引用；包装器已失效，仍会无副作用透传。
+          }
+        }
+      }
+    }
+    this.consoleHooks.clear();
   }
 
   /** 统一执行容量淘汰，并同步释放已经不可见的流式状态。 */

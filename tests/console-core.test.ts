@@ -33,6 +33,60 @@ describe('ConsoleCore', () => {
     }
   });
 
+  it('keeps nested console hooks isolated across out-of-order destroy', () => {
+    vi.stubGlobal('HTMLElement', class HTMLElementStub {});
+    const nativeOutput = vi.fn();
+    console.log = nativeOutput;
+    const first = new ConsoleCore({ captureGlobalErrors: false, maxLogs: 10 });
+    const second = new ConsoleCore({ captureGlobalErrors: false, maxLogs: 10 });
+
+    try {
+      first.init();
+      second.init();
+      console.log('captured by both');
+      expect(first.getEntries()).toHaveLength(1);
+      expect(second.getEntries()).toHaveLength(1);
+
+      first.destroy();
+      console.log('captured by second');
+      expect(first.getEntries()).toHaveLength(1);
+      expect(second.getEntries()).toHaveLength(2);
+
+      second.destroy();
+      expect(console.log).toBe(nativeOutput);
+      console.log('native only');
+      expect(first.getEntries()).toHaveLength(1);
+      expect(second.getEntries()).toHaveLength(2);
+      expect(nativeOutput).toHaveBeenCalledTimes(3);
+    } finally {
+      first.destroy();
+      second.destroy();
+    }
+  });
+
+  it('rolls back earlier console hooks when installation fails partway through', () => {
+    vi.stubGlobal('HTMLElement', class HTMLElementStub {});
+    const originalLog = console.log;
+    const originalInfoDescriptor = Object.getOwnPropertyDescriptor(console, 'info');
+    const core = new ConsoleCore({ captureGlobalErrors: false, hookConsole: true });
+
+    Object.defineProperty(console, 'info', {
+      ...originalInfoDescriptor,
+      writable: false,
+      configurable: true,
+    });
+
+    try {
+      expect(() => core.init()).toThrow();
+      expect(console.log).toBe(originalLog);
+    } finally {
+      core.destroy();
+      if (originalInfoDescriptor) {
+        Object.defineProperty(console, 'info', originalInfoDescriptor);
+      }
+    }
+  });
+
   it('batches chunks into one streaming entry and marks it complete', () => {
     const callbacks = new Map<number, FrameRequestCallback>();
     let nextHandle = 0;

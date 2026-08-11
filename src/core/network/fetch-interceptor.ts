@@ -1,5 +1,10 @@
 import type { NetworkEntry, NetworkOptions } from '../../types';
 import { nextId } from '../../utils/time';
+import {
+  createGlobalHook,
+  detachGlobalHook,
+  type GlobalHookHandle,
+} from '../global-hook';
 import { serializeBody } from './body-serialization';
 import { finishNetworkEntry, type NetworkCaptureSink } from './network-capture';
 
@@ -61,7 +66,7 @@ function isStreamingContentType(contentType: string): boolean {
 
 /** 接管并恢复 fetch，独立管理响应副本读取与忽略规则。 */
 export class FetchInterceptor {
-  private originalFetch: typeof window.fetch | null = null;
+  private fetchHook: GlobalHookHandle<typeof window.fetch> | null = null;
   private activeReaders = new Set<ReadableStreamDefaultReader<Uint8Array>>();
   private ignoreRules = new Set<FetchIgnoreRule>();
   private active = false;
@@ -74,18 +79,19 @@ export class FetchInterceptor {
   install(): void {
     if (this.active) return;
 
-    const originalFetch = window.fetch;
     const self = this;
-    const installedFetch = async function (
+    const fetchHook = createGlobalHook(window.fetch, (link) => async function (
       input: RequestInfo | URL,
       init?: RequestInit,
     ): Promise<Response> {
+      if (!link.active) return link.previous.call(window, input, init);
+
       const url = getFetchURL(input);
       const method = getFetchMethod(input, init);
 
       // 先判断再读取 header/body，避免调试工具自身的凭据和诊断内容被记录下来。
       if (self.shouldIgnore(url, method)) {
-        return originalFetch.call(window, input, init);
+        return link.previous.call(window, input, init);
       }
       const requestHeaders = collectFetchHeaders(input, init);
       const entry: NetworkEntry = {
@@ -108,7 +114,7 @@ export class FetchInterceptor {
       self.sink.addEntry(entry);
 
       try {
-        const response = await originalFetch.call(window, input, init);
+        const response = await link.previous.call(window, input, init);
         if (!self.active) return response;
 
         entry.status = response.status;
@@ -132,11 +138,11 @@ export class FetchInterceptor {
         }
         throw error;
       }
-    };
+    });
 
-    this.originalFetch = originalFetch;
+    this.fetchHook = fetchHook;
     this.active = true;
-    window.fetch = installedFetch;
+    window.fetch = fetchHook.hook;
   }
 
   addIgnoreRule(rule: FetchIgnoreRule): () => void {
@@ -154,8 +160,10 @@ export class FetchInterceptor {
     });
     this.activeReaders.clear();
 
-    if (this.originalFetch) window.fetch = this.originalFetch;
-    this.originalFetch = null;
+    if (this.fetchHook) {
+      window.fetch = detachGlobalHook(window.fetch, this.fetchHook);
+      this.fetchHook = null;
+    }
   }
 
   private shouldIgnore(url: string, method: string): boolean {

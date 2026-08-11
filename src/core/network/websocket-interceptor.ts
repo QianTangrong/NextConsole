@@ -1,10 +1,15 @@
 import type { NetworkEntry, StreamMessage } from '../../types';
 import { nextId } from '../../utils/time';
+import {
+  createGlobalHook,
+  detachGlobalHook,
+  type GlobalHookHandle,
+} from '../global-hook';
 import { finishNetworkEntry, type NetworkCaptureSink } from './network-capture';
 
 /** 代理 WebSocket 构造器与收发方法，并阻止销毁后的连接继续写入采集状态。 */
 export class WebSocketInterceptor {
-  private originalWebSocket: typeof WebSocket | null = null;
+  private webSocketHook: GlobalHookHandle<typeof WebSocket> | null = null;
   private active = false;
 
   constructor(private readonly sink: NetworkCaptureSink) {}
@@ -12,14 +17,16 @@ export class WebSocketInterceptor {
   install(): void {
     if (this.active || typeof window.WebSocket === 'undefined') return;
 
-    const OriginalWebSocket = window.WebSocket;
     const self = this;
-    const ProxiedWebSocket = function (
+    const webSocketHook = createGlobalHook(window.WebSocket, (link) => function (
       this: WebSocket,
       url: string | URL,
       protocols?: string | string[],
     ) {
-      const webSocket = new OriginalWebSocket(url, protocols);
+      const CurrentWebSocket = link.previous;
+      if (!link.active) return new CurrentWebSocket(url, protocols);
+
+      const webSocket = new CurrentWebSocket(url, protocols);
       const entry: NetworkEntry = {
         id: nextId(),
         type: 'websocket',
@@ -87,25 +94,27 @@ export class WebSocketInterceptor {
       };
 
       return webSocket;
-    } as unknown as typeof WebSocket;
+    } as unknown as typeof WebSocket);
 
-    Object.defineProperties(ProxiedWebSocket, {
-      CONNECTING: { value: OriginalWebSocket.CONNECTING },
-      OPEN: { value: OriginalWebSocket.OPEN },
-      CLOSING: { value: OriginalWebSocket.CLOSING },
-      CLOSED: { value: OriginalWebSocket.CLOSED },
-      prototype: { value: OriginalWebSocket.prototype },
+    Object.defineProperties(webSocketHook.hook, {
+      CONNECTING: { value: window.WebSocket.CONNECTING },
+      OPEN: { value: window.WebSocket.OPEN },
+      CLOSING: { value: window.WebSocket.CLOSING },
+      CLOSED: { value: window.WebSocket.CLOSED },
+      prototype: { value: window.WebSocket.prototype },
     });
 
-    this.originalWebSocket = OriginalWebSocket;
+    this.webSocketHook = webSocketHook;
     this.active = true;
-    window.WebSocket = ProxiedWebSocket;
+    window.WebSocket = webSocketHook.hook;
   }
 
   restore(): void {
     if (!this.active) return;
     this.active = false;
-    if (this.originalWebSocket) window.WebSocket = this.originalWebSocket;
-    this.originalWebSocket = null;
+    if (this.webSocketHook) {
+      window.WebSocket = detachGlobalHook(window.WebSocket, this.webSocketHook);
+      this.webSocketHook = null;
+    }
   }
 }
