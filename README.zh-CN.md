@@ -147,6 +147,13 @@ const nc = new Nconsole({
 });
 ```
 
+CommonJS 使用方可直接获得构造函数：
+
+```js
+const Nconsole = require('nconsole');
+const nc = new Nconsole();
+```
+
 该功能固定调用 NewAPI 兼容接口 `https://ai-api.libsou.com/v1/chat/completions` 与 `deepseek-v4-flash`，使用 `Authorization: Bearer <API Key>` 认证。发送给模型的是经脱敏和限长处理的错误栈、近期控制台记录、关联网络状态、页面运行环境及 `contextProvider` 返回值；不会发送请求头、请求/响应 body、Cookie、浏览器存储或 URL 查询参数。诊断请求本身也不会出现在 Network 面板。
 
 这是浏览器直连模式，Key 会暴露给当前页面运行环境，因此仅适用于开发调试。服务端不允许跨域时，浏览器无法直接调用。

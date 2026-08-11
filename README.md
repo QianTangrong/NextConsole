@@ -191,6 +191,13 @@ nc.use({
 });
 ```
 
+CommonJS consumers receive the constructor directly:
+
+```js
+const Nconsole = require('nconsole');
+const nc = new Nconsole();
+```
+
 ### Plugin API
 
 | Property / Method | Description |

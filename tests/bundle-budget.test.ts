@@ -16,6 +16,7 @@ describe('bundle budget configuration', () => {
   it('covers every public JavaScript artifact', () => {
     expect(Object.keys(budget.files)).toEqual([
       'nconsole.es.js',
+      'nconsole.cjs',
       'nconsole.umd.js',
       'nconsole.min.js',
       'lite.js',

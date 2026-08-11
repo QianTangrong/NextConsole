@@ -2,14 +2,14 @@
   "name": "nconsole",
   "version": "2.0.0",
   "description": "Next-generation front-end debugging console. Replaces vConsole with AI streaming log support, modern web & mobile H5 optimization.",
-  "main": "dist/nconsole.umd.js",
+  "main": "dist/nconsole.cjs",
   "module": "dist/nconsole.es.js",
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/nconsole.es.js",
-      "require": "./dist/nconsole.umd.js"
+      "require": "./dist/nconsole.cjs"
     },
     "./lite": {
       "types": "./dist/lite.d.ts",
@@ -39,8 +39,9 @@
   ],
   "scripts": {
     "dev": "vite",
-    "build": "npm run typecheck && npm run build:main && npm run build:lite && npm run build:core && npm run build:plugins && npm run build:cdn && npm run build:cdn:lite && npm run build:types && npm run check:bundle",
+    "build": "npm run typecheck && npm run build:main && npm run build:cjs && npm run build:lite && npm run build:core && npm run build:plugins && npm run build:cdn && npm run build:cdn:lite && npm run build:types && npm run check:bundle && npm run check:exports",
     "build:main": "vite build --config vite.config.mts",
+    "build:cjs": "node ./scripts/build-cjs-wrapper.mjs",
     "build:lite": "vite build --config vite.entry.config.mts --mode lite",
     "build:core": "vite build --config vite.entry.config.mts --mode core",
     "build:plugins": "npm run build:plugin:source && npm run build:plugin:performance && npm run build:plugin:mimo",
@@ -51,6 +52,7 @@
     "build:cdn:lite": "vite build --config vite.lite-cdn.config.mts",
     "build:types": "tsc -p tsconfig.build.json",
     "check:bundle": "node ./scripts/check-bundle-budget.mjs",
+    "check:exports": "node ./scripts/check-package-exports.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "test": "vitest run",

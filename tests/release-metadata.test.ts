@@ -44,9 +44,10 @@ describe('release metadata', () => {
 
   it('publishes the Nconsole 2.x artifact and public-constructor contract', () => {
     expect(Number(packageManifest.version.split('.')[0])).toBeGreaterThanOrEqual(2);
-    expect(packageManifest.main).toBe('dist/nconsole.umd.js');
+    expect(packageManifest.main).toBe('dist/nconsole.cjs');
     expect(packageManifest.module).toBe('dist/nconsole.es.js');
     expect(packageManifest.types).toBe('dist/index.d.ts');
+    expect(packageManifest.exports['.'].require).toBe('./dist/nconsole.cjs');
 
     const rootEntry = readFileSync(resolve(root, 'src/index.ts'), 'utf8');
     expect(rootEntry).toContain('export class Nconsole');
