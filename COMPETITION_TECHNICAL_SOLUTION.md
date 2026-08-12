@@ -128,7 +128,7 @@ SSE 场景的关键难点在于：连接生命周期长、响应体持续流动�
    - 默认关闭，仅在 `mimoDiagnosis.enabled` 为 true 时注册。
    - 新增“AI 诊断”标签页。
    - API Key 只保留在当前输入框，不写入配置、Storage 或日志。
-   - 诊断请求固定调用 `https://token-plan-cn.xiaomimimo.com/v1/chat/completions` 和 `mimo-v2.5-pro`。
+   - 诊断请求固定调用 `https://ai-api.libsou.com/v1/chat/completions` 和 `deepseek-v4-flash`。
    - 发送内容为脱敏、限长后的错误、近期日志、网络状态、运行环境和业务补充上下文。
    - 使用 `networkCore.addFetchIgnoreRule` 排除诊断请求本身，避免 API Key 和诊断快照被 Network 面板反向记录。
    - 要求模型只返回结构化 JSON，并在客户端验证字段后再渲染。
