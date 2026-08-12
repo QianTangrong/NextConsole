@@ -15,16 +15,16 @@ const budget = JSON.parse(
 describe('bundle budget configuration', () => {
   it('covers every public JavaScript artifact', () => {
     expect(Object.keys(budget.files)).toEqual([
-      'nconsole.es.js',
+      'nconsole.es.mjs',
       'nconsole.cjs',
       'nconsole.umd.js',
       'nconsole.min.js',
-      'lite.js',
+      'lite.mjs',
       'nconsole.lite.min.js',
-      'core.js',
-      'plugins/source.js',
-      'plugins/performance.js',
-      'plugins/mimo-ai-diagnosis.js',
+      'core.mjs',
+      'plugins/source.mjs',
+      'plugins/performance.mjs',
+      'plugins/mimo-ai-diagnosis.mjs',
     ]);
   });
 

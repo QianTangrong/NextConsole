@@ -27,9 +27,9 @@ for (const [file, limits] of Object.entries(budget.files)) {
   }
 }
 
-assertSmaller('lite.js', 'nconsole.es.js');
+assertSmaller('lite.mjs', 'nconsole.es.mjs');
 assertSmaller('nconsole.lite.min.js', 'nconsole.min.js');
-assertSmaller('core.js', 'lite.js');
+assertSmaller('core.mjs', 'lite.mjs');
 
 if (failures.length > 0) {
   throw new Error(`Bundle budget check failed:\n${failures.join('\n')}`);

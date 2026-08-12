@@ -7,27 +7,27 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const entries = {
   lite: {
     entry: 'src/lite.ts',
-    fileName: 'lite.js',
+    fileName: 'lite.mjs',
     name: 'NconsoleLite',
   },
   core: {
     entry: 'src/core.ts',
-    fileName: 'core.js',
+    fileName: 'core.mjs',
     name: 'NconsoleCore',
   },
   'plugin-source': {
     entry: 'src/plugins/source-plugin.ts',
-    fileName: 'plugins/source.js',
+    fileName: 'plugins/source.mjs',
     name: 'NconsoleSourcePlugin',
   },
   'plugin-performance': {
     entry: 'src/plugins/performance-plugin.ts',
-    fileName: 'plugins/performance.js',
+    fileName: 'plugins/performance.mjs',
     name: 'NconsolePerformancePlugin',
   },
   'plugin-mimo': {
     entry: 'src/plugins/mimo-ai-diagnosis-plugin.ts',
-    fileName: 'plugins/mimo-ai-diagnosis.js',
+    fileName: 'plugins/mimo-ai-diagnosis.mjs',
     name: 'NconsoleMimoAIDiagnosisPlugin',
   },
 } as const;

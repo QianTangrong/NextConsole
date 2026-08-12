@@ -1,23 +1,14 @@
 /**
- * Vite library build configuration: build ES and UMD bundles plus a rolled-up
- * TypeScript declaration file from src/index.ts.
+ * Vite library build configuration for the ES and UMD runtime bundles.
+ * TypeScript declarations are emitted once by tsconfig.build.json.
  */
 import { defineConfig } from 'vite';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import dts from 'vite-plugin-dts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
-  plugins: [
-    dts({
-      insertTypesEntry: true,
-      bundleTypes: {
-        bundledPackages: [],
-      },
-    }),
-  ],
   server: {
     open: '/examples/index.html',
   },
@@ -32,7 +23,7 @@ export default defineConfig({
       entry: resolve(__dirname, 'src/index.ts'),
       name: 'Nconsole',
       formats: ['es', 'umd'],
-      fileName: (format) => `nconsole.${format}.js`,
+      fileName: (format) => format === 'es' ? 'nconsole.es.mjs' : 'nconsole.umd.js',
     },
     rolldownOptions: {
       output: {

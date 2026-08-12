@@ -45,7 +45,7 @@ describe('release metadata', () => {
   it('publishes the Nconsole 2.x artifact and public-constructor contract', () => {
     expect(Number(packageManifest.version.split('.')[0])).toBeGreaterThanOrEqual(2);
     expect(packageManifest.main).toBe('dist/nconsole.cjs');
-    expect(packageManifest.module).toBe('dist/nconsole.es.js');
+    expect(packageManifest.module).toBe('dist/nconsole.es.mjs');
     expect(packageManifest.types).toBe('dist/index.d.ts');
     expect(packageManifest.exports['.'].require).toBe('./dist/nconsole.cjs');
 
@@ -61,7 +61,7 @@ describe('release metadata', () => {
     for (const entry of expectedEntries.slice(1)) {
       expect(Object.keys(packageManifest.exports[entry])).toEqual(['types', 'import']);
       expect(packageManifest.exports[entry].types).toMatch(/^\.\/dist\/.+\.d\.ts$/);
-      expect(packageManifest.exports[entry].import).toMatch(/^\.\/dist\/.+\.js$/);
+      expect(packageManifest.exports[entry].import).toMatch(/^\.\/dist\/.+\.mjs$/);
     }
   });
 
@@ -100,6 +100,7 @@ describe('release metadata', () => {
       'utf8',
     );
     const readme = readFileSync(resolve(root, 'README.zh-CN.md'), 'utf8');
+    const technicalSolution = readFileSync(resolve(root, 'COMPETITION_TECHNICAL_SOLUTION.md'), 'utf8');
     const baseUrl = source.match(/const MIMO_BASE_URL = '([^']+)'/)?.[1];
     const model = source.match(/const MIMO_MODEL = '([^']+)'/)?.[1];
 
@@ -110,6 +111,9 @@ describe('release metadata', () => {
     expect(readme).toContain('Authorization: Bearer <API Key>');
     expect(readme).not.toContain('token-plan-cn.xiaomimimo.com');
     expect(readme).not.toContain('使用请求头 `api-key`');
+    expect(technicalSolution).toContain(`${baseUrl}/v1/chat/completions`);
+    expect(technicalSolution).toContain(model);
+    expect(technicalSolution).not.toContain('token-plan-cn.xiaomimimo.com');
   });
 });
 

@@ -13,23 +13,23 @@ async function importArtifact(relativePath) {
   return import(pathToFileURL(resolve(root, relativePath)).href);
 }
 
-const rootModule = await importArtifact('dist/nconsole.es.js');
+const rootModule = await importArtifact('dist/nconsole.es.mjs');
 assert.equal(typeof rootModule.default, 'function');
 assert.equal(rootModule.default, rootModule.Nconsole);
 
-const liteModule = await importArtifact('dist/lite.js');
+const liteModule = await importArtifact('dist/lite.mjs');
 assert.equal(typeof liteModule.default, 'function');
 assert.equal(liteModule.default, liteModule.Nconsole);
 
-const coreModule = await importArtifact('dist/core.js');
+const coreModule = await importArtifact('dist/core.mjs');
 assert.equal(typeof coreModule.ConsoleCore, 'function');
 assert.equal(typeof coreModule.NetworkCore, 'function');
 assert.equal(typeof coreModule.StorageCore, 'function');
 
 for (const [file, exportName] of [
-  ['dist/plugins/source.js', 'createSourcePlugin'],
-  ['dist/plugins/performance.js', 'createPerformancePlugin'],
-  ['dist/plugins/mimo-ai-diagnosis.js', 'createMimoAIDiagnosisPlugin'],
+  ['dist/plugins/source.mjs', 'createSourcePlugin'],
+  ['dist/plugins/performance.mjs', 'createPerformancePlugin'],
+  ['dist/plugins/mimo-ai-diagnosis.mjs', 'createMimoAIDiagnosisPlugin'],
 ]) {
   const pluginModule = await importArtifact(file);
   assert.equal(typeof pluginModule[exportName], 'function');
