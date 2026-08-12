@@ -288,7 +288,17 @@ describe('NetworkCore', () => {
         responseBody: { ok: true },
         pending: false,
       });
-      expect(onUpdate).toHaveBeenCalledOnce();
+
+      const largeXHR = new FakeXMLHttpRequest();
+      largeXHR.responseText = JSON.stringify({ value: 'x'.repeat(20_000) });
+      largeXHR.open('post', '/large');
+      largeXHR.send('x'.repeat(20_000));
+      largeXHR.dispatch('loadend');
+      const largeEntry = core.getEntries()[1];
+      expect(largeEntry.requestBody).toContain('(truncated)');
+      expect(typeof largeEntry.responseBody).toBe('string');
+      expect((largeEntry.responseBody as string).length).toBeLessThan(11_000);
+      expect(onUpdate).toHaveBeenCalledTimes(2);
     } finally {
       core.destroy();
     }
@@ -426,5 +436,40 @@ describe('NetworkCore', () => {
     socket.send('still-sent');
     expect(socket.sent).toEqual(['outgoing', 'still-sent']);
     expect(core.getEntries()[0].messages).toHaveLength(2);
+  });
+
+  it('bounds individual and aggregate streaming message payloads', () => {
+    installWindow();
+    const store = new NetworkCaptureStore(1, vi.fn(), vi.fn(), vi.fn());
+    const entry: NetworkEntry = {
+      id: 1,
+      type: 'websocket',
+      method: 'WS',
+      url: 'ws://localhost',
+      requestHeaders: {},
+      requestBody: null,
+      status: 101,
+      statusText: 'Switching Protocols',
+      responseHeaders: {},
+      responseBody: null,
+      startTime: 0,
+      endTime: 0,
+      duration: 0,
+      pending: true,
+      messages: [],
+    };
+    store.addEntry(entry);
+
+    for (let index = 0; index < 1200; index += 1) {
+      store.pushStreamMessage(entry, {
+        direction: 'in',
+        data: 'x'.repeat(25_000),
+        timestamp: index,
+      });
+    }
+
+    expect(entry.messages?.[0].data).toContain('(truncated)');
+    expect(entry.messages).toHaveLength(1000);
+    expect(entry.messages?.reduce((total, message) => total + message.data.length, 0)).toBeLessThanOrEqual(1_000_000);
   });
 });

@@ -1,15 +1,17 @@
+import { snapshotValue } from '../../utils/snapshot';
+
 /** 非流式响应体预览的字符上限。 */
 const MAX_BODY_PREVIEW_CHARS = 10000;
 
 /** 将请求体归一化为可安全展示的轻量描述，不直接保留二进制内容。 */
 export function serializeBody(body: unknown): unknown {
   if (body === null || body === undefined) return null;
-  if (typeof body === 'string') return body;
-  if (typeof URLSearchParams !== 'undefined' && body instanceof URLSearchParams) return body.toString();
+  if (typeof body === 'string') return truncateBody(body);
+  if (typeof URLSearchParams !== 'undefined' && body instanceof URLSearchParams) return truncateBody(body.toString());
   if (typeof FormData !== 'undefined' && body instanceof FormData) {
     const obj: Record<string, string> = {};
     body.forEach((value, key) => {
-      obj[key] = typeof value === 'string' ? value : `[File: ${(value as File).name}]`;
+      obj[key] = typeof value === 'string' ? truncateBody(value) : `[File: ${(value as File).name}]`;
     });
     return obj;
   }
@@ -23,7 +25,7 @@ export function serializeBody(body: unknown): unknown {
 export function serializeXHRResponse(xhr: XMLHttpRequest): unknown {
   const responseType = xhr.responseType || 'text';
 
-  if (responseType === 'json') return xhr.response;
+  if (responseType === 'json') return snapshotValue(xhr.response);
   if (responseType === 'blob') {
     const blob = xhr.response as Blob | null;
     return blob ? `[Blob: ${blob.size} bytes]` : '[Blob]';
@@ -44,7 +46,7 @@ export function serializeXHRResponse(xhr: XMLHttpRequest): unknown {
       ? `${text.slice(0, MAX_BODY_PREVIEW_CHARS)}...(truncated)`
       : text;
 
-    if (contentType.includes('application/json')) {
+    if (contentType.includes('application/json') && text.length <= MAX_BODY_PREVIEW_CHARS) {
       try {
         return JSON.parse(text);
       } catch {
@@ -56,4 +58,10 @@ export function serializeXHRResponse(xhr: XMLHttpRequest): unknown {
   } catch {
     return '[Unable to read body]';
   }
+}
+
+function truncateBody(value: string): string {
+  return value.length > MAX_BODY_PREVIEW_CHARS
+    ? `${value.slice(0, MAX_BODY_PREVIEW_CHARS)}...(truncated)`
+    : value;
 }

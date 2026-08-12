@@ -4,6 +4,8 @@
 import type { LogEntry, LogLevel, LogSource, ConsoleOptions } from '../types';
 import { EventEmitter } from '../utils/event-emitter';
 import { nextId } from '../utils/time';
+import { BoundedBuffer, normalizeRetentionLimit } from '../utils/bounded-buffer';
+import { snapshotValue } from '../utils/snapshot';
 import {
   createGlobalHook,
   detachGlobalHook,
@@ -21,6 +23,7 @@ const DEFAULT_OPTIONS: ConsoleOptions = {
   hookConsole: true,
   captureGlobalErrors: true,
 };
+const MAX_STREAM_CHARS = 100_000;
 
 /** 所有被接管的方法都在此白名单中，销毁时按同一列表精确恢复。 */
 const LOG_LEVELS: LogLevel[] = ['log', 'info', 'warn', 'error', 'debug'];
@@ -30,7 +33,7 @@ type ConsoleMethod = (...args: unknown[]) => void;
    * 接管 window.console 并采集日志条目，同时支持 AI 流式日志的原地追加。
  */
 export class ConsoleCore extends EventEmitter<ConsoleEvents> {
-  private entries: LogEntry[] = [];
+  private entries: BoundedBuffer<LogEntry>;
   private options: ConsoleOptions;
   /** 保存每个 console 包装器的链路句柄，支持多个 Core 乱序销毁。 */
   private consoleHooks = new Map<LogLevel, GlobalHookHandle<ConsoleMethod>>();
@@ -44,6 +47,8 @@ export class ConsoleCore extends EventEmitter<ConsoleEvents> {
   constructor(options?: Partial<ConsoleOptions>) {
     super();
     this.options = { ...DEFAULT_OPTIONS, ...options };
+    this.options.maxLogs = normalizeRetentionLimit(this.options.maxLogs, DEFAULT_OPTIONS.maxLogs);
+    this.entries = new BoundedBuffer(this.options.maxLogs);
   }
 
   /** 开始拦截 console 方法及浏览器原生运行时异常 */
@@ -51,7 +56,7 @@ export class ConsoleCore extends EventEmitter<ConsoleEvents> {
     if (this.hooked) return;
 
     try {
-      if (this.options.hookConsole) {
+      if (this.options.hookConsole !== false) {
         for (const level of LOG_LEVELS) {
           const hook = createGlobalHook(console[level] as ConsoleMethod, (link) => (...args: unknown[]) => {
             // 先调用原方法，保证浏览器 DevTools 的可观测性不因采集而改变。
@@ -63,7 +68,7 @@ export class ConsoleCore extends EventEmitter<ConsoleEvents> {
         }
       }
 
-      if (this.options.captureGlobalErrors) {
+      if (this.options.captureGlobalErrors !== false) {
         this.bindGlobalErrorListeners();
       }
 
@@ -98,8 +103,7 @@ export class ConsoleCore extends EventEmitter<ConsoleEvents> {
       source: options.source ?? 'console',
     };
 
-    this.entries.push(entry);
-    this.trimEntries();
+    this.storeEntry(entry);
 
     this.emit('entry', entry);
   }
@@ -166,20 +170,23 @@ export class ConsoleCore extends EventEmitter<ConsoleEvents> {
       entry = {
         id: nextId(),
         level: 'log',
-        args: [chunk],
+        args: [truncateStreamText(chunk)],
         timestamp: Date.now(),
         streamId,
         streaming: true,
         source: 'console',
       };
       this.streamBuffers.set(streamId, entry);
-      this.entries.push(entry);
-      this.trimEntries();
+      this.storeEntry(entry);
       this.emit('entry', entry);
     } else {
       // 同一流只更新首个参数，渲染层可据此稳定复用既有 DOM 行。
-      entry.args = [(entry.args[0] as string) + chunk];
-      this.scheduleStreamFlush(entry);
+      const current = entry.args[0] as string;
+      if (current.length <= MAX_STREAM_CHARS && chunk.length > 0) {
+        const next = truncateStreamText(current + chunk);
+        entry.args = [next];
+        this.scheduleStreamFlush(entry);
+      }
     }
   }
 
@@ -209,59 +216,23 @@ export class ConsoleCore extends EventEmitter<ConsoleEvents> {
 
   /** 记录参数快照而非可变对象引用，保证历史日志不会随业务对象变化而失真。 */
   private cloneArgs(args: unknown[]): unknown[] {
-    return args.map((arg) => {
-      if (arg instanceof Error) {
-        return { message: arg.message, stack: arg.stack, name: arg.name };
-      }
-      if (arg instanceof HTMLElement) {
-        return `<${arg.tagName.toLowerCase()}>`;
-      }
-      if (arg instanceof Date) {
-        return arg.toISOString();
-      }
-      if (arg instanceof RegExp) {
-        return arg.toString();
-      }
-      if (arg instanceof Map) {
-        try {
-          return { __type: 'Map', entries: JSON.parse(JSON.stringify([...arg])) };
-        } catch {
-          return `Map(${arg.size})`;
-        }
-      }
-      if (arg instanceof Set) {
-        try {
-          return { __type: 'Set', values: JSON.parse(JSON.stringify([...arg])) };
-        } catch {
-          return `Set(${arg.size})`;
-        }
-      }
-      if (typeof arg === 'symbol') {
-        return arg.toString();
-      }
-      if (typeof arg === 'function') {
-        return `ƒ ${arg.name || 'anonymous'}()`;
-      }
-      // 普通对象使用 JSON 快照；无法序列化时退回字符串，采集流程不能因此中断。
-      if (typeof arg === 'object' && arg !== null) {
-        try {
-          return JSON.parse(JSON.stringify(arg));
-        } catch {
-          return String(arg);
-        }
-      }
-      return arg;
-    });
+    return snapshotValue(args.map((arg) => arg instanceof Error
+      ? getErrorDetails(arg, 'Error', 'Unknown error')
+      : arg)) as unknown[];
   }
 
   /** 返回当前采集的日志条目。 */
   getEntries(): LogEntry[] {
-    return this.entries;
+    return this.entries.toArray();
+  }
+
+  getEntryCount(): number {
+    return this.entries.size;
   }
 
   /** 按级别与关键词筛选日志，供控制台面板直接消费。 */
   getFilteredEntries(levels?: LogLevel[], search?: string): LogEntry[] {
-    let result = this.entries;
+    let result = this.entries.toArray();
     if (levels && levels.length > 0) {
       result = result.filter((e) => levels.includes(e.level));
     }
@@ -276,7 +247,7 @@ export class ConsoleCore extends EventEmitter<ConsoleEvents> {
 
   /** 清空普通与流式日志状态，并同步通知订阅者刷新。 */
   clear(): void {
-    this.entries.length = 0;
+    this.entries.clear();
     this.streamBuffers.clear();
     this.cancelPendingStreamUpdate();
     this.emit('clear');
@@ -284,7 +255,7 @@ export class ConsoleCore extends EventEmitter<ConsoleEvents> {
 
   /** 将当前日志导出为格式化 JSON。 */
   exportJSON(): string {
-    return JSON.stringify(this.entries, null, 2);
+    return JSON.stringify(this.entries.toArray(), null, 2);
   }
 
   /** 恢复所有原生监听与 console 方法，释放调试器运行期资源。 */
@@ -294,6 +265,7 @@ export class ConsoleCore extends EventEmitter<ConsoleEvents> {
     this.restoreConsoleHooks();
     this.hooked = false;
     this.cancelPendingStreamUpdate();
+    this.streamBuffers.clear();
     this.removeAllListeners();
   }
 
@@ -316,18 +288,14 @@ export class ConsoleCore extends EventEmitter<ConsoleEvents> {
     this.consoleHooks.clear();
   }
 
-  /** 统一执行容量淘汰，并同步释放已经不可见的流式状态。 */
-  private trimEntries(): void {
-    const overflow = this.entries.length - this.options.maxLogs;
-    if (overflow <= 0) return;
-
-    const removed = this.entries.splice(0, overflow);
-    for (const entry of removed) {
-      if (entry.streamId && this.streamBuffers.get(entry.streamId) === entry) {
-        this.streamBuffers.delete(entry.streamId);
-      }
-      this.pendingStreamEntries.delete(entry);
+  /** 写入环形缓冲并同步释放被淘汰日志关联的流式状态。 */
+  private storeEntry(entry: LogEntry): void {
+    const removed = this.entries.push(entry);
+    if (!removed) return;
+    if (removed.streamId && this.streamBuffers.get(removed.streamId) === removed) {
+      this.streamBuffers.delete(removed.streamId);
     }
+    this.pendingStreamEntries.delete(removed);
     if (this.pendingStreamEntries.size === 0) this.cancelPendingStreamUpdate();
   }
 
@@ -343,6 +311,12 @@ export class ConsoleCore extends EventEmitter<ConsoleEvents> {
       this.flushTimer = null;
     }
   }
+}
+
+function truncateStreamText(value: string): string {
+  return value.length > MAX_STREAM_CHARS
+    ? `${value.slice(0, MAX_STREAM_CHARS)}...(truncated)`
+    : value;
 }
 
 /** 从浏览器错误载荷中提取稳定、可序列化的错误描述。 */

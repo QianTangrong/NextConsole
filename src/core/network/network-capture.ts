@@ -1,7 +1,9 @@
 import type { NetworkEntry, SSEEvent, StreamMessage } from '../../types';
+import { BoundedBuffer } from '../../utils/bounded-buffer';
 
 /** 面板内单个实时通道最多保留的消息数，避免长连接无限增长。 */
 const MAX_MESSAGES = 1000;
+const MAX_MESSAGE_CHARS = 980;
 
 /** 统一完成请求计时，减少各协议重复的状态收尾逻辑。 */
 export function finishNetworkEntry(entry: NetworkEntry): void {
@@ -22,7 +24,7 @@ export interface NetworkCaptureSink {
  * 统一管理请求记录、消息限流和流式刷新调度，让各协议只处理自己的浏览器 API 生命周期。
  */
 export class NetworkCaptureStore implements NetworkCaptureSink {
-  private entries: NetworkEntry[] = [];
+  private entries: BoundedBuffer<NetworkEntry>;
   private activeEntries = new Set<NetworkEntry>();
   private scheduledUpdates = new Map<number, number>();
 
@@ -31,17 +33,16 @@ export class NetworkCaptureStore implements NetworkCaptureSink {
     private readonly onRequest: (entry: NetworkEntry) => void,
     private readonly onUpdate: (entry: NetworkEntry, requiresTableRebuild: boolean) => void,
     private readonly onClear: () => void,
-  ) {}
+  ) {
+    this.entries = new BoundedBuffer(retentionLimit);
+  }
 
   addEntry(entry: NetworkEntry): void {
-    this.entries.push(entry);
+    const removed = this.entries.push(entry);
     this.activeEntries.add(entry);
-    if (this.entries.length > this.retentionLimit) {
-      const removed = this.entries.splice(0, this.entries.length - this.retentionLimit);
-      for (const staleEntry of removed) {
-        this.activeEntries.delete(staleEntry);
-        this.cancelScheduledUpdate(staleEntry);
-      }
+    if (removed) {
+      this.activeEntries.delete(removed);
+      this.cancelScheduledUpdate(removed);
     }
     this.onRequest(entry);
   }
@@ -55,20 +56,14 @@ export class NetworkCaptureStore implements NetworkCaptureSink {
     if (!this.isActive(entry)) return;
     const events = entry.sseEvents;
     if (!events) return;
-    if (events.length >= MAX_MESSAGES) {
-      events.splice(0, events.length - MAX_MESSAGES + 100);
-    }
-    events.push(event);
+    pushBoundedMessage(events, event);
   }
 
   pushStreamMessage(entry: NetworkEntry, message: StreamMessage): void {
     if (!this.isActive(entry)) return;
     const messages = entry.messages;
     if (!messages) return;
-    if (messages.length >= MAX_MESSAGES) {
-      messages.splice(0, messages.length - MAX_MESSAGES + 100);
-    }
-    messages.push(message);
+    pushBoundedMessage(messages, message);
     this.scheduleUpdate(entry);
   }
 
@@ -85,12 +80,12 @@ export class NetworkCaptureStore implements NetworkCaptureSink {
   }
 
   getEntries(): NetworkEntry[] {
-    return this.entries;
+    return this.entries.toArray();
   }
 
   clear(): void {
     this.cancelAllScheduledUpdates();
-    this.entries.length = 0;
+    this.entries.clear();
     this.activeEntries.clear();
     this.onClear();
   }
@@ -116,4 +111,15 @@ export class NetworkCaptureStore implements NetworkCaptureSink {
     window.cancelAnimationFrame(scheduled);
     this.scheduledUpdates.delete(entry.id);
   }
+}
+
+function truncateMessageData(data: string): string {
+  return data.length > MAX_MESSAGE_CHARS
+    ? `${data.slice(0, MAX_MESSAGE_CHARS)}...(truncated)`
+    : data;
+}
+
+function pushBoundedMessage<T extends { data: string }>(items: T[], item: T): void {
+  items.push({ ...item, data: truncateMessageData(item.data) });
+  if (items.length > MAX_MESSAGES) items.splice(0, items.length - MAX_MESSAGES);
 }

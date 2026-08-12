@@ -3,6 +3,7 @@
  */
 import type { NetworkEntry, NetworkOptions } from '../types';
 import { EventEmitter } from '../utils/event-emitter';
+import { normalizeRetentionLimit } from '../utils/bounded-buffer';
 import { FetchInterceptor } from './network/fetch-interceptor';
 import { NetworkCaptureStore } from './network/network-capture';
 import { SSEInterceptor } from './network/sse-interceptor';
@@ -42,6 +43,7 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
   constructor(options?: Partial<NetworkOptions>) {
     super();
     this.options = { ...DEFAULT_OPTIONS, ...options };
+    this.options.maxRequests = normalizeRetentionLimit(this.options.maxRequests, DEFAULT_OPTIONS.maxRequests);
     this.captureStore = new NetworkCaptureStore(
       this.options.maxRequests,
       (entry) => this.emit('request', entry),
@@ -58,10 +60,10 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
     if (this.hooked) return;
 
     try {
-      if (this.options.hookFetch) this.fetchInterceptor.install();
-      if (this.options.hookXHR) this.xhrInterceptor.install();
-      if (this.options.hookSSE) this.sseInterceptor.install();
-      if (this.options.hookWebSocket) this.webSocketInterceptor.install();
+      if (this.options.hookFetch !== false) this.fetchInterceptor.install();
+      if (this.options.hookXHR !== false) this.xhrInterceptor.install();
+      if (this.options.hookSSE !== false) this.sseInterceptor.install();
+      if (this.options.hookWebSocket !== false) this.webSocketInterceptor.install();
       this.hooked = true;
     } catch (error) {
       // 任一全局代理安装失败时回滚此前代理，避免留下半初始化状态。

@@ -52,8 +52,9 @@ export function highlightJSON(value: unknown, maxDepth = 4): string {
 
       if (Array.isArray(val)) {
         if (val.length === 0) return span('bracket', '[]');
-        const items = val.map((item) => render(item, depth + 1)).join(span('comma', ', '));
-        return span('bracket', '[') + items + span('bracket', ']');
+        const items = val.slice(0, 100).map((item) => render(item, depth + 1)).join(span('comma', ', '));
+        const suffix = val.length > 100 ? span('comma', `, ... +${val.length - 100}`) : '';
+        return span('bracket', '[') + items + suffix + span('bracket', ']');
       }
 
       // 对象仅展示前 100 个键，避免日志中大型载荷阻塞面板渲染。

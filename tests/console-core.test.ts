@@ -126,6 +126,60 @@ describe('ConsoleCore', () => {
     }
   });
 
+  it('bounds the first stream chunk and marks an exact-limit stream when more data arrives', () => {
+    const callbacks = new Map<number, FrameRequestCallback>();
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callbacks.set(1, callback);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', (handle: number) => callbacks.delete(handle));
+    const core = new ConsoleCore({ captureGlobalErrors: false, hookConsole: false, maxLogs: 10 });
+
+    core.appendStream('large', 'x'.repeat(250_000));
+    core.appendStream('exact', 'y'.repeat(100_000));
+    core.appendStream('exact', '!');
+
+    const [large, exact] = core.getEntries();
+    expect(large.args[0]).toBe(`${'x'.repeat(100_000)}...(truncated)`);
+    expect(exact.args[0]).toBe(`${'y'.repeat(100_000)}...(truncated)`);
+  });
+
+  it('keeps console argument arrays valid for null-prototype objects', () => {
+    vi.stubGlobal('HTMLElement', class HTMLElementStub {});
+    const nativeOutput = vi.fn();
+    console.log = nativeOutput;
+    const core = new ConsoleCore({ captureGlobalErrors: false, hookConsole: true, maxLogs: 10 });
+    const value = Object.assign(Object.create(null) as Record<string, unknown>, { answer: 42 });
+
+    try {
+      core.init();
+      console.log(value);
+      expect(core.getEntries()[0].args).toEqual([{ answer: 42 }]);
+    } finally {
+      core.destroy();
+    }
+  });
+
+  it('preserves Error metadata in captured console arguments', () => {
+    vi.stubGlobal('HTMLElement', class HTMLElementStub {});
+    const nativeOutput = vi.fn();
+    console.log = nativeOutput;
+    const core = new ConsoleCore({ captureGlobalErrors: false, hookConsole: true, maxLogs: 10 });
+    const error = new Error('origin');
+
+    try {
+      core.init();
+      console.log(error);
+      expect(core.getEntries()[0].args[0]).toEqual(expect.objectContaining({
+        name: 'Error',
+        message: 'origin',
+        stack: expect.stringContaining('Error: origin'),
+      }));
+    } finally {
+      core.destroy();
+    }
+  });
+
   it('releases pending stream work when entries are evicted or cleared', () => {
     const callbacks = new Map<number, FrameRequestCallback>();
     let nextHandle = 0;
@@ -163,5 +217,20 @@ describe('ConsoleCore', () => {
     } finally {
       core.destroy();
     }
+  });
+
+  it('falls back to the safe limit when maxLogs is undefined', () => {
+    const core = new ConsoleCore({
+      captureGlobalErrors: false,
+      hookConsole: false,
+      maxLogs: undefined,
+    } as unknown as ConstructorParameters<typeof ConsoleCore>[0]);
+
+    for (let index = 0; index < 10_005; index += 1) {
+      core.appendStream(`stream-${index}`, 'value');
+    }
+
+    expect(core.getEntries()).toHaveLength(10_000);
+    expect(core.getEntries()[0].streamId).toBe('stream-5');
   });
 });
