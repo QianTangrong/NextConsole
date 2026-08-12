@@ -310,35 +310,48 @@ export class MainPanel {
     let startY = 0;
     let startHeight = 0;
     let dragging = false;
+    let resizeFrame: number | null = null;
+    let pendingHeight: number | null = null;
+
+    const flushHeight = () => {
+      if (pendingHeight === null) return;
+      this.panelEl.style.height = `${pendingHeight}px`;
+      pendingHeight = null;
+    };
 
     const onMove = (clientY: number) => {
       if (!dragging) return;
       const delta = startY - clientY;
       const newHeight = clamp(startHeight + delta, 100, window.innerHeight - 60);
-      this.panelEl.style.height = `${newHeight}px`;
+      pendingHeight = newHeight;
+      if (resizeFrame === null) {
+        resizeFrame = requestAnimationFrame(() => {
+          resizeFrame = null;
+          flushHeight();
+        });
+      }
     };
 
     const onEnd = () => {
+      flushHeight();
       dragging = false;
     };
 
-    handle.addEventListener('mousedown', (e) => {
+    handle.addEventListener('pointerdown', (e) => {
       dragging = true;
       startY = e.clientY;
       startHeight = this.panelEl.offsetHeight;
     });
 
-    handle.addEventListener('touchstart', (e) => {
-      dragging = true;
-      startY = e.touches[0].clientY;
-      startHeight = this.panelEl.offsetHeight;
-    }, { passive: true });
-
     this.cleanups.push(
-      on(window as any, 'mousemove', (e: MouseEvent) => onMove(e.clientY)),
-      on(window as any, 'mouseup', onEnd),
-      on(window as any, 'touchmove', (e: TouchEvent) => onMove(e.touches[0].clientY)),
-      on(window as any, 'touchend', onEnd),
+      on(window as any, 'pointermove', (e: PointerEvent) => onMove(e.clientY)),
+      on(window as any, 'pointerup', onEnd),
+      on(window as any, 'pointercancel', onEnd),
+      () => {
+        if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
+        resizeFrame = null;
+        pendingHeight = null;
+      },
     );
   }
 

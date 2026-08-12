@@ -3,6 +3,7 @@
  */
 import type { LogEntry } from '../types/console';
 import type { NetworkEntry } from '../types/network';
+import { escapeHTML } from './dom';
 
 /** 导出容量预算：优先保留最新错误和关联请求，避免生成难以审核的超大上下文。 */
 const MAX_ERRORS = 20;
@@ -11,6 +12,7 @@ const MAX_NETWORK_BODY_CHARS = 3_000;
 const MAX_LOG_ARGUMENT_CHARS = 2_000;
 const MAX_STACK_CHARS = 6_000;
 const MAX_DOM_SNAPSHOT_CHARS = 20_000;
+const MAX_DOM_SNAPSHOT_NODES = 2_000;
 const NETWORK_CORRELATION_WINDOW_MS = 5_000;
 const SENSITIVE_KEY_PATTERN = /authorization|api[-_ ]?key|token|secret|password|cookie|credential|session|email|phone|mobile|address|user(name)?|idcard|identity|national[-_ ]?id|passport/i;
 
@@ -327,46 +329,63 @@ function sanitizeValue(value: unknown, overrides: Partial<SanitizationOptions> =
  * 只克隆 DOM 结构；表单、可编辑内容、事件属性与调试器自身节点都不会进入导出快照。
  */
 function createDOMSnapshot(): string {
-  const root = document.documentElement.cloneNode(true) as HTMLElement;
-  root.querySelectorAll('#nconsole-host, script, style, link[rel="stylesheet"], noscript').forEach((element) => element.remove());
+  const marker = '<!-- truncated -->';
+  const chunks: string[] = [];
+  let remaining = MAX_DOM_SNAPSHOT_CHARS - marker.length;
+  let nodeCount = 0;
+  let truncated = false;
 
-  root.querySelectorAll('input, textarea, select, [contenteditable]').forEach((element) => {
-    const tagName = element.tagName.toLowerCase();
-    if (tagName === 'textarea' || element.hasAttribute('contenteditable')) {
-      element.textContent = '[REDACTED]';
-    }
-    if (tagName === 'select') {
-      element.querySelectorAll('option').forEach((option) => option.removeAttribute('selected'));
-    } else {
-      element.setAttribute('value', '[REDACTED]');
-    }
-  });
+  const append = (value: string): void => {
+    const part = value.slice(0, remaining);
+    chunks.push(part);
+    remaining -= part.length;
+    if (part.length < value.length) truncated = true;
+  };
 
-  root.querySelectorAll('*').forEach((element) => {
-    for (const attribute of Array.from(element.attributes)) {
+  const walk = (node: Node): void => {
+    if (truncated) return;
+    if (++nodeCount > MAX_DOM_SNAPSHOT_NODES) {
+      truncated = true;
+      return;
+    }
+    if (node.nodeType === Node.TEXT_NODE) {
+      append(escapeHTML(redactText(node.textContent || '', 1_000)));
+      return;
+    }
+    if (!(node instanceof Element)) return;
+
+    const tag = node.tagName.toLowerCase();
+    if (node.id === 'nconsole-host' || ['script', 'style', 'noscript'].includes(tag)
+      || (tag === 'link' && node.getAttribute('rel')?.toLowerCase() === 'stylesheet')) return;
+    append(`<${tag}`);
+    for (const attribute of Array.from(node.attributes)) {
       const name = attribute.name.toLowerCase();
-      if (name.startsWith('on')) {
-        element.removeAttribute(attribute.name);
-      } else if (name === 'value' || name.startsWith('data-') || SENSITIVE_KEY_PATTERN.test(name)) {
-        element.setAttribute(attribute.name, '[REDACTED]');
+      if (name.startsWith('on') || (name === 'selected' && tag === 'option')) continue;
+
+      let value: string;
+      if (name === 'value' || name.startsWith('data-') || SENSITIVE_KEY_PATTERN.test(name) || name === 'srcset') {
+        value = '[REDACTED]';
       } else if (name === 'href' || name === 'src' || name === 'action') {
-        element.setAttribute(attribute.name, sanitizeUrl(attribute.value));
-      } else if (name === 'srcset') {
-        element.setAttribute(attribute.name, '[REDACTED]');
+        value = sanitizeUrl(attribute.value);
       } else {
-        element.setAttribute(attribute.name, redactText(attribute.value, 1_000));
+        value = redactText(attribute.value, 1_000);
       }
+      append(` ${name}="${escapeHTML(value)}"`);
+      if (truncated) return;
     }
-  });
+    append('>');
 
-  // 文本节点同样可能包含凭据或隐私字段，不能只处理 HTML 属性。
-  const textWalker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  let textNode: Text | null;
-  while ((textNode = textWalker.nextNode() as Text | null)) {
-    textNode.data = redactText(textNode.data, 1_000);
-  }
+    if (tag === 'textarea' || node.hasAttribute('contenteditable')) {
+      append('[REDACTED]');
+    } else {
+      for (let child = node.firstChild; child && !truncated; child = child.nextSibling) walk(child);
+    }
+    append(`</${tag}>`);
+  };
 
-  return truncateText(root.outerHTML, MAX_DOM_SNAPSHOT_CHARS);
+  walk(document.documentElement);
+  if (truncated) chunks.push(marker);
+  return chunks.join('');
 }
 
 /** 仅保留 http(s) 的 origin 与 pathname，查询参数和其他协议资源不会外发。 */
@@ -383,7 +402,7 @@ function sanitizeUrl(rawUrl: string): string {
 }
 
 function redactText(value: string, maxLength: number): string {
-  const redacted = value
+  const redacted = value.slice(0, maxLength + 512)
     .replace(/\b([\w.-]*?(?:api[-_ ]?key|token|secret|password|cookie|credential|session)[\w.-]*)\s*[:=]\s*([^\s,;}&"']+)/gi, '$1=[REDACTED]')
     .replace(/\b(Bearer\s+)[A-Za-z0-9._~+\-/=]+/gi, '$1[REDACTED]')
     .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, '[REDACTED_JWT]')

@@ -101,7 +101,6 @@ export class StoragePanel {
         const key = target.dataset.ncKey!;
         const type = target.dataset.ncType as StorageType;
         this.core.removeItem(type, key);
-        this.refreshTable();
         return;
       }
       // Click row to expand/collapse
@@ -174,7 +173,6 @@ export class StoragePanel {
       value: '',
     }, (data) => {
       this.core.setItem(data.type as StorageType, data.key, data.value);
-      this.refreshTable();
     });
   }
 
@@ -190,13 +188,12 @@ export class StoragePanel {
     }, (data) => {
       const nextType = data.type as StorageType;
       if (nextType !== type || data.key !== key) {
-        if (this.core.setItem(nextType, data.key, data.value)) {
+        if (this.core.setItem(nextType, data.key, data.value, undefined, false)) {
           this.core.removeItem(type, key);
         }
       } else {
         this.core.setItem(nextType, data.key, data.value);
       }
-      this.refreshTable();
     });
   }
 

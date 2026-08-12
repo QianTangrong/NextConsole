@@ -122,6 +122,7 @@ export const THEME_CSS: string = `
 .nc-resize-handle {
   height: 6px;
   cursor: ns-resize;
+  touch-action: none;
   background: var(--nc-bg-secondary);
   display: flex;
   align-items: center;

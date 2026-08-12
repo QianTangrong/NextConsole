@@ -11,6 +11,9 @@ interface SourceEntry {
   size?: number;
 }
 
+const MAX_SOURCE_CHARS = 500_000;
+const MAX_SOURCE_LINES = 2_000;
+
 const SOURCE_CSS = `
 .nc-source-list {
   flex: 1;
@@ -154,7 +157,11 @@ function collectSources(): SourceEntry[] {
   document.querySelectorAll('script:not([src])').forEach((el) => {
     const text = el.textContent || '';
     if (text.trim()) {
-      entries.push({ type: 'inline-script', content: text, size: text.length });
+      entries.push({
+        type: 'inline-script',
+        content: text.slice(0, MAX_SOURCE_CHARS),
+        size: text.length,
+      });
     }
   });
 
@@ -168,7 +175,11 @@ function collectSources(): SourceEntry[] {
   document.querySelectorAll('style').forEach((el) => {
     const text = el.textContent || '';
     if (text.trim() && !el.closest('#nconsole-host')) {
-      entries.push({ type: 'inline-style', content: text, size: text.length });
+      entries.push({
+        type: 'inline-style',
+        content: text.slice(0, MAX_SOURCE_CHARS),
+        size: text.length,
+      });
     }
   });
 
@@ -192,9 +203,17 @@ function getDisplayName(entry: SourceEntry): string {
 /** 创建只读源码检查插件，避免对宿主脚本和样式产生任何修改。 */
 export function createSourcePlugin(): NconsolePlugin {
   let container: HTMLElement;
-  let currentView: 'list' | 'detail' = 'list';
+  let activeController: AbortController | null = null;
+  let renderVersion = 0;
+
+  function cancelPendingRequest(): void {
+    renderVersion += 1;
+    activeController?.abort();
+    activeController = null;
+  }
 
   function renderList() {
+    cancelPendingRequest();
     const sources = collectSources();
     if (sources.length === 0) {
       container.innerHTML = '<div class="nc-source-view"><div class="nc-source-empty">No sources found</div></div>';
@@ -233,11 +252,11 @@ export function createSourcePlugin(): NconsolePlugin {
       showDetail(sources[idx]);
     });
 
-    currentView = 'list';
   }
 
   async function showDetail(entry: SourceEntry) {
-    currentView = 'detail';
+    cancelPendingRequest();
+    const version = renderVersion;
     const title = entry.url ? escapeHTML(entry.url) : escapeHTML(entry.type);
 
     container.innerHTML = `
@@ -252,30 +271,39 @@ export function createSourcePlugin(): NconsolePlugin {
     container.querySelector('.nc-source-detail-back')!.addEventListener('click', renderList);
 
     let code = entry.content || '';
+    let truncated = (entry.size ?? 0) > code.length;
 
     if (!code && entry.url) {
+      const controller = new AbortController();
+      activeController = controller;
       try {
-        const res = await fetch(entry.url);
-        code = await res.text();
+        const res = await fetch(entry.url, { signal: controller.signal });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        [code, truncated] = await readSourcePreview(res);
       } catch (err) {
+        if (controller.signal.aborted || version !== renderVersion) return;
         const codeEl = container.querySelector('.nc-source-code') as HTMLElement;
-        codeEl.innerHTML = `<div class="nc-source-empty" style="color:var(--nc-error)">Failed to fetch: ${escapeHTML(String(err))}</div>`;
+        if (codeEl) {
+          codeEl.innerHTML = `<div class="nc-source-empty" style="color:var(--nc-error)">Failed to fetch: ${escapeHTML(String(err))}</div>`;
+        }
         return;
+      } finally {
+        if (activeController === controller) activeController = null;
       }
     }
+    if (version !== renderVersion) return;
 
     const lines = code.split('\n');
     const codeEl = container.querySelector('.nc-source-code') as HTMLElement;
+    if (!codeEl) return;
 
-    // Render in chunks for large files
-    const MAX_RENDER = 5000;
-    const renderCount = Math.min(lines.length, MAX_RENDER);
+    const renderCount = Math.min(lines.length, MAX_SOURCE_LINES);
     let html = '';
     for (let i = 0; i < renderCount; i++) {
       html += `<div class="nc-source-line"><span class="nc-source-lineno">${i + 1}</span><span class="nc-source-linetext">${escapeHTML(lines[i])}</span></div>`;
     }
-    if (lines.length > MAX_RENDER) {
-      html += `<div class="nc-source-empty">... ${lines.length - MAX_RENDER} more lines truncated</div>`;
+    if (lines.length > MAX_SOURCE_LINES || truncated) {
+      html += '<div class="nc-source-empty">... source preview truncated</div>';
     }
     codeEl.innerHTML = html;
   }
@@ -291,8 +319,32 @@ export function createSourcePlugin(): NconsolePlugin {
         renderList();
       },
       destroy() {
+        cancelPendingRequest();
         container.innerHTML = '';
       },
     },
   };
+}
+
+/** 逐块读取远程源码，到达预览上限后主动取消副本读取。 */
+async function readSourcePreview(response: Response): Promise<[string, boolean]> {
+  if (!response.body) return ['', false];
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let text = '';
+  let truncated = false;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    text += decoder.decode(value, { stream: true });
+    if (text.length > MAX_SOURCE_CHARS) {
+      text = text.slice(0, MAX_SOURCE_CHARS);
+      truncated = true;
+      await reader.cancel();
+      break;
+    }
+  }
+  if (!truncated) text += decoder.decode();
+  return [text, truncated];
 }

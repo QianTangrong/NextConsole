@@ -156,6 +156,10 @@ export class ReplPanel {
     }
 
     this.outputEl.appendChild(row);
+    const retained = this.core.getEntries().length;
+    while (this.outputEl.childElementCount > retained) {
+      this.outputEl.firstElementChild?.remove();
+    }
     this.outputEl.scrollTop = this.outputEl.scrollHeight;
   }
 

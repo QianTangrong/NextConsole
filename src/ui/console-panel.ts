@@ -17,13 +17,14 @@ export class ConsolePanel {
   private listEl!: HTMLElement;
   private toolbarEl!: HTMLElement;
   private core: ConsoleCore;
-  private filteredEntries: LogEntry[] = [];
   private activeFilters = new Set<LogLevel>();
   private searchText = '';
   private scrollLocked = true;
   /** 高频日志更新合并到动画帧中，非可见面板仅标记待刷新状态。 */
   private renderRAF: number | null = null;
   private needsRefresh = false;
+  private pendingEntries = new Map<number, LogEntry>();
+  private renderedEntryCount = 0;
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
   private feedbackTimer: number | null = null;
   private cleanups: (() => void)[] = [];
@@ -124,11 +125,11 @@ export class ConsolePanel {
     });
 
     // Core events
-    const unsub1 = this.core.on('entry', () => {
-      this.scheduleRefresh();
+    const unsub1 = this.core.on('entry', (entry) => {
+      this.scheduleEntry(entry, true);
     });
-    const unsub2 = this.core.on('streamUpdate', () => {
-      this.scheduleRefresh();
+    const unsub2 = this.core.on('streamUpdate', (entry) => {
+      this.scheduleEntry(entry, false);
     });
     const unsub3 = this.core.on('clear', () => {
       this.scheduleRefresh();
@@ -139,14 +140,42 @@ export class ConsolePanel {
 
   /** 面板不可见时延迟刷新，重新激活后再渲染，避免后台标签持续创建 DOM。 */
   private scheduleRefresh(): void {
+    this.needsRefresh = true;
+    this.pendingEntries.clear();
+    this.requestRenderFrame();
+  }
+
+  /** 新日志按需追加，流式更新复用同一队列并只替换自己的行。 */
+  private scheduleEntry(entry: LogEntry, isNew: boolean): void {
+    if (this.searchText || (isNew && this.activeFilters.size > 0)) {
+      this.scheduleRefresh();
+      return;
+    }
+    if (!isNew && this.activeFilters.size > 0 && !this.activeFilters.has(entry.level)) return;
+    if (isNew && this.core.getEntryCount() === 0) return;
+    this.pendingEntries.set(entry.id, entry);
+    this.requestRenderFrame();
+  }
+
+  private requestRenderFrame(): void {
     if (!this.isRenderable()) {
       this.needsRefresh = true;
+      this.pendingEntries.clear();
       return;
     }
     if (this.renderRAF !== null) return;
     this.renderRAF = requestAnimationFrame(() => {
       this.renderRAF = null;
-      this.refreshEntries();
+      if (this.needsRefresh) {
+        this.needsRefresh = false;
+        this.pendingEntries.clear();
+        this.refreshEntries();
+        return;
+      }
+
+      const entries = [...this.pendingEntries.values()];
+      this.pendingEntries.clear();
+      this.flushEntries(entries);
     });
   }
 
@@ -156,6 +185,7 @@ export class ConsolePanel {
       this.renderRAF = null;
     }
     this.needsRefresh = false;
+    this.pendingEntries.clear();
     this.refreshEntries();
   }
 
@@ -167,33 +197,69 @@ export class ConsolePanel {
   private refreshEntries(): void {
     if (!this.isRenderable() && this.needsRefresh) return;
     const levels = this.activeFilters.size > 0 ? Array.from(this.activeFilters) : undefined;
-    this.filteredEntries = this.core.getFilteredEntries(levels, this.searchText || undefined);
-    this.renderList();
+    this.renderList(this.core.getFilteredEntries(levels, this.searchText || undefined));
   }
 
-  private renderList(): void {
-    const entries = this.filteredEntries;
+  private renderList(entries: LogEntry[]): void {
     // 只渲染最新记录，内存中的完整日志仍由 ConsoleCore 保留并可导出。
     const start = Math.max(0, entries.length - MAX_RENDER);
 
     let html = '';
     if (start > 0) {
-      html += `<div class="nc-log-entry" style="justify-content:center;color:var(--nc-text-muted);font-size:11px">... 省略了 ${start} 条更早的日志 ...</div>`;
+      html += this.renderOmitted(start);
     }
     for (let i = start; i < entries.length; i++) {
-      const entry = entries[i];
-      const streamClass = entry.streaming ? ' nc-log-streaming' : '';
-      html += `<div class="nc-log-entry nc-log-level-${entry.level}${streamClass}">`;
-      html += `<span class="nc-log-time">${formatTime(entry.timestamp)}</span>`;
-      html += `<span class="nc-log-body">${this.renderArgs(entry.args)}</span>`;
-      html += `</div>`;
+      html += this.renderEntry(entries[i]);
     }
     this.listEl.innerHTML = html;
+    this.renderedEntryCount = entries.length - start;
 
     // Auto-scroll to bottom
     if (this.scrollLocked && entries.length > 0) {
       this.listEl.scrollTop = this.listEl.scrollHeight;
     }
+  }
+
+  private flushEntries(entries: LogEntry[]): void {
+    if (entries.length === 0) return;
+    let html = '';
+    let appended = 0;
+    for (const entry of entries) {
+      const row = this.listEl.querySelector(`[data-nc-log-id="${entry.id}"]`);
+      if (row) row.outerHTML = this.renderEntry(entry);
+      else {
+        html += this.renderEntry(entry);
+        appended += 1;
+      }
+    }
+    if (html) this.listEl.insertAdjacentHTML('beforeend', html);
+    if (appended > 0) {
+      this.renderedEntryCount += appended;
+      const retainedVisibleCount = Math.min(this.core.getEntryCount(), MAX_RENDER);
+      while (this.renderedEntryCount > retainedVisibleCount) {
+        this.listEl.querySelector('[data-nc-log-id]')?.remove();
+        this.renderedEntryCount -= 1;
+      }
+      const omitted = Math.max(0, this.core.getEntryCount() - this.renderedEntryCount);
+      const row = this.listEl.querySelector('.nc-log-omitted');
+      if (row && omitted === 0) row.remove();
+      else if (row) row.textContent = `... 省略了 ${omitted} 条更早的日志 ...`;
+      else if (omitted > 0) this.listEl.insertAdjacentHTML('afterbegin', this.renderOmitted(omitted));
+    }
+
+    if (this.scrollLocked) this.listEl.scrollTop = this.listEl.scrollHeight;
+  }
+
+  private renderEntry(entry: LogEntry): string {
+    const streamClass = entry.streaming ? ' nc-log-streaming' : '';
+    return `<div class="nc-log-entry nc-log-level-${entry.level}${streamClass}" data-nc-log-id="${entry.id}">`
+      + `<span class="nc-log-time">${formatTime(entry.timestamp)}</span>`
+      + `<span class="nc-log-body">${this.renderArgs(entry.args)}</span>`
+      + `</div>`;
+  }
+
+  private renderOmitted(count: number): string {
+    return `<div class="nc-log-entry nc-log-omitted" style="justify-content:center;color:var(--nc-text-muted);font-size:11px">... 省略了 ${count} 条更早的日志 ...</div>`;
   }
 
   private renderArgs(args: unknown[]): string {
@@ -238,6 +304,7 @@ export class ConsolePanel {
     }
     this.cleanups.forEach((fn) => fn());
     this.cleanups.length = 0;
+    this.pendingEntries.clear();
     this.container.innerHTML = '';
   }
 }

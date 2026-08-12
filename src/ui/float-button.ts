@@ -18,6 +18,8 @@ export class FloatButton {
   private currentX = 0;
   private currentY = 0;
   private snapTimer: ReturnType<typeof setTimeout> | null = null;
+  private moveFrame: number | null = null;
+  private pendingPosition: { x: number; y: number } | null = null;
 
   constructor(
     private container: ShadowRoot,
@@ -48,92 +50,58 @@ export class FloatButton {
     this.el.style.top = `${this.currentY}px`;
   }
 
+  /** 合并同一动画帧内的连续指针事件，避免拖动时反复触发布局。 */
+  private schedulePosition(x: number, y: number): void {
+    this.pendingPosition = { x, y };
+    if (this.moveFrame !== null) return;
+    this.moveFrame = requestAnimationFrame(() => {
+      this.moveFrame = null;
+      this.flushPosition();
+    });
+  }
+
+  private flushPosition(): void {
+    if (!this.pendingPosition) return;
+    const { x, y } = this.pendingPosition;
+    this.pendingPosition = null;
+    this.setPosition(x, y);
+  }
+
   private bindEvents(): void {
-    // 触摸事件与鼠标事件并行支持，移动端不依赖桌面端指针行为。
+    // Pointer Events 统一鼠标、触摸与触控笔，避免为同一拖动链路维护两套监听器。
+    const onEnd = () => {
+      if (!this.isDragging) return;
+      if (!this.dragStarted) this.onClick();
+      else {
+        this.flushPosition();
+        this.snapToEdge();
+      }
+      this.isDragging = false;
+      this.dragStarted = false;
+    };
+
     this.cleanups.push(
-      on(this.el, 'touchstart', (e: TouchEvent) => {
-        e.preventDefault();
+      on(this.el, 'pointerdown', (event: PointerEvent) => {
+        event.preventDefault();
         this.isDragging = true;
         this.dragStarted = false;
-        const touch = e.touches[0];
-        this.startX = touch.clientX;
-        this.startY = touch.clientY;
-        this.offsetX = this.el.offsetLeft;
-        this.offsetY = this.el.offsetTop;
-      }, { passive: false }),
-    );
-
-    this.cleanups.push(
-      on(window as any, 'touchmove', (e: TouchEvent) => {
-        if (!this.isDragging) return;
-        const touch = e.touches[0];
-        const dx = touch.clientX - this.startX;
-        const dy = touch.clientY - this.startY;
-
-        if (!this.dragStarted && Math.abs(dx) + Math.abs(dy) > 5) {
-          this.dragStarted = true;
-        }
-
-        if (this.dragStarted) {
-          this.setPosition(this.offsetX + dx, this.offsetY + dy);
-        }
-      }, { passive: true }),
-    );
-
-    this.cleanups.push(
-      on(window as any, 'touchend', () => {
-        if (this.isDragging) {
-          if (!this.dragStarted) {
-            this.onClick();
-          } else {
-            this.snapToEdge();
-          }
-          this.isDragging = false;
-          this.dragStarted = false;
-        }
-      }),
-    );
-
-    // Mouse events for desktop
-    this.cleanups.push(
-      on(this.el, 'mousedown', (e: MouseEvent) => {
-        e.preventDefault();
-        this.isDragging = true;
-        this.dragStarted = false;
-        this.startX = e.clientX;
-        this.startY = e.clientY;
+        this.startX = event.clientX;
+        this.startY = event.clientY;
         this.offsetX = this.el.offsetLeft;
         this.offsetY = this.el.offsetTop;
       }),
-    );
-
-    this.cleanups.push(
-      on(window as any, 'mousemove', (e: MouseEvent) => {
+      on(window as any, 'pointermove', (event: PointerEvent) => {
         if (!this.isDragging) return;
-        const dx = e.clientX - this.startX;
-        const dy = e.clientY - this.startY;
-
-        if (!this.dragStarted && Math.abs(dx) + Math.abs(dy) > 5) {
-          this.dragStarted = true;
-        }
-
-        if (this.dragStarted) {
-          this.setPosition(this.offsetX + dx, this.offsetY + dy);
-        }
+        const dx = event.clientX - this.startX;
+        const dy = event.clientY - this.startY;
+        if (!this.dragStarted && Math.abs(dx) + Math.abs(dy) > 5) this.dragStarted = true;
+        if (this.dragStarted) this.schedulePosition(this.offsetX + dx, this.offsetY + dy);
       }),
-    );
-
-    this.cleanups.push(
-      on(window as any, 'mouseup', () => {
-        if (this.isDragging) {
-          if (!this.dragStarted) {
-            this.onClick();
-          } else {
-            this.snapToEdge();
-          }
-          this.isDragging = false;
-          this.dragStarted = false;
-        }
+      on(window as any, 'pointerup', onEnd),
+      on(window as any, 'pointercancel', () => {
+        this.isDragging = false;
+        this.dragStarted = false;
+        this.pendingPosition = null;
       }),
     );
 
@@ -173,6 +141,11 @@ export class FloatButton {
   }
 
   destroy(): void {
+    if (this.moveFrame !== null) {
+      cancelAnimationFrame(this.moveFrame);
+      this.moveFrame = null;
+    }
+    this.pendingPosition = null;
     if (this.snapTimer !== null) {
       clearTimeout(this.snapTimer);
       this.snapTimer = null;

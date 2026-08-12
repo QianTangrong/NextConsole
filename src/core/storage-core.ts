@@ -108,7 +108,7 @@ export class StorageCore extends EventEmitter<StorageEvents> {
     expires?: string;
     secure?: boolean;
     sameSite?: string;
-  }): boolean {
+  }, notify = true): boolean {
     let ok = false;
     try {
       if (type === 'localStorage') {
@@ -131,12 +131,12 @@ export class StorageCore extends EventEmitter<StorageEvents> {
     } catch {
       // Storage may be unavailable
     }
-    this.emit('update');
+    if (notify) this.emit('update');
     return ok;
   }
 
   /** 删除单个存储条目；Cookie 通过设置过期时间实现删除。 */
-  removeItem(type: StorageType, key: string): void {
+  removeItem(type: StorageType, key: string, notify = true): void {
     try {
       if (type === 'localStorage') {
         localStorage.removeItem(key);
@@ -152,7 +152,7 @@ export class StorageCore extends EventEmitter<StorageEvents> {
     } catch {
       // Storage may be unavailable
     }
-    this.emit('update');
+    if (notify) this.emit('update');
   }
 
   /** 清空一种存储介质；Cookie 逐条过期以避免影响其他域。 */
@@ -165,7 +165,7 @@ export class StorageCore extends EventEmitter<StorageEvents> {
       } else if (type === 'cookie') {
         const entries = this.readCookies();
         for (const entry of entries) {
-          this.removeItem('cookie', entry.key);
+          this.removeItem('cookie', entry.key, false);
         }
       }
     } catch {
