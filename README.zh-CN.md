@@ -130,9 +130,9 @@ nc.endStream('chat-1');
 
 即使面对数千次高频更新，也能通过 `requestAnimationFrame` 批量渲染避免 UI 卡顿。
 
-## NewAPI AI 错误诊断（开发调试）
+## NewAPI AI 错误与性能诊断（开发调试）
 
-默认关闭。启用后会新增“AI 诊断”标签页，开发者在该页临时输入 NewAPI API Key，再对某一条 `console.error`、未处理的运行时异常或未处理 Promise 拒绝手动发起诊断。Key 只保留在输入框内，不会写入配置、Storage 或日志；刷新页面或销毁实例后失效。为兼容既有公开 API，配置项和插件子路径仍保留 `mimoDiagnosis` / `mimo-ai-diagnosis` 命名。
+默认关闭。启用后会新增“AI 诊断”标签页，开发者在该页临时输入 NewAPI API Key，可以一键诊断当前页面的首屏加载、LCP、CLS、INP、资源、网络和主线程性能，也可以对某一条 `console.error`、未处理的运行时异常或未处理 Promise 拒绝手动发起诊断。Key 只保留在输入框内，不会写入配置、Storage 或日志；刷新页面或销毁实例后失效。为兼容既有公开 API，配置项和插件子路径仍保留 `mimoDiagnosis` / `mimo-ai-diagnosis` 命名。
 
 ```ts
 const nc = new Nconsole({
@@ -154,7 +154,11 @@ const Nconsole = require('nconsole');
 const nc = new Nconsole();
 ```
 
-该功能固定调用 NewAPI 兼容接口 `https://ai-api.libsou.com/v1/chat/completions` 与 `deepseek-v4-flash`，使用 `Authorization: Bearer <API Key>` 认证。发送给模型的是经脱敏和限长处理的错误栈、近期控制台记录、关联网络状态、页面运行环境及 `contextProvider` 返回值；不会发送请求头、请求/响应 body、Cookie、浏览器存储或 URL 查询参数。诊断请求本身也不会出现在 Network 面板。
+该功能固定调用 NewAPI 兼容接口 `https://ai-api.libsou.com/v1/chat/completions` 与 `deepseek-v4-flash`，使用 `Authorization: Bearer <API Key>` 认证。错误诊断发送经脱敏和限长处理的错误栈、近期控制台记录、关联网络状态、页面运行环境及 `contextProvider` 返回值；性能诊断发送当前会话的 Performance API 指标、资源摘要、长任务、本地规则结论及有界的 Network/错误摘要。两种诊断都不会发送请求头、请求/响应 body、Cookie、浏览器存储或 URL 查询参数，诊断请求本身也不会出现在 Network 面板。
+
+性能采集会剔除可识别的 Nconsole 独立产物、AI/Source 插件内部请求和 `#nconsole-host` 内的 LCP、CLS、INP，并从混合长任务中扣除已登记的工具同步耗时；重复诊断不会把上一轮模型请求计入资源汇总。若 Nconsole 与业务代码被构建到同一个首屏 Bundle，浏览器无法再把该共享文件的解析和执行成本按模块拆分。
+
+性能结论属于当前设备、网络与缓存状态下的单次会话样本，不等同于线上真实用户数据的第 75 百分位。浏览器不支持或当前会话尚未产生的 LCP、CLS、INP 会明确标为缺失，不会按 `0` 处理。
 
 这是浏览器直连模式，Key 会暴露给当前页面运行环境，因此仅适用于开发调试。服务端不允许跨域时，浏览器无法直接调用。
 

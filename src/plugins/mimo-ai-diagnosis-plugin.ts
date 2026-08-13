@@ -11,6 +11,21 @@ import type {
   NconsolePlugin,
   PluginAPI,
 } from '../types';
+import {
+  createLocalPerformanceFindings,
+  PerformanceSnapshotCollector,
+  type LocalPerformanceFinding,
+  type PerformanceSnapshot,
+} from './performance-snapshot';
+import {
+  createPerformanceNetworkContext,
+  normalizePerformanceDiagnosis,
+  PERFORMANCE_DIAGNOSIS_SYSTEM_PROMPT,
+  renderPerformanceEvidence,
+  renderPerformanceResult,
+  serializePerformanceSnapshot,
+  type PerformanceDiagnosisSnapshot,
+} from './mimo-performance-diagnosis';
 
 /** 诊断请求只使用下列容量预算，避免将完整页面数据或长期历史发送到外部服务。 */
 const MIMO_BASE_URL = 'https://ai-api.libsou.com';
@@ -162,6 +177,20 @@ const MIMO_DIAGNOSIS_CSS = `
 .nc-mimo-result-list li { margin: 4px 0; line-height: 1.55; }
 .nc-mimo-cause { padding: 8px; border-left: 3px solid var(--nc-error); background: var(--nc-bg); }
 .nc-mimo-fix { padding: 8px; border-left: 3px solid var(--nc-info); background: var(--nc-bg); }
+.nc-mimo-performance-action { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.nc-mimo-performance-metrics { display: grid; grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: 6px; margin-top: 10px; }
+.nc-mimo-performance-metric { padding: 7px; border: 1px solid var(--nc-border); border-left-width: 3px; border-radius: var(--nc-radius); background: var(--nc-bg); }
+.nc-mimo-performance-metric[data-rating="good"] { border-left-color: #3dc9b0; }
+.nc-mimo-performance-metric[data-rating="needs-improvement"] { border-left-color: #cca700; }
+.nc-mimo-performance-metric[data-rating="poor"] { border-left-color: var(--nc-error); }
+.nc-mimo-performance-metric-name { color: var(--nc-text-muted); font-size: 10px; }
+.nc-mimo-performance-metric-value { margin-top: 2px; color: var(--nc-text); font-weight: 600; }
+.nc-mimo-performance-evidence { display: grid; gap: 6px; margin-top: 10px; }
+.nc-mimo-performance-finding { padding: 7px; border-left: 3px solid var(--nc-border); background: var(--nc-bg); color: var(--nc-text-secondary); line-height: 1.5; }
+.nc-mimo-performance-finding[data-severity="high"] { border-left-color: var(--nc-error); }
+.nc-mimo-performance-finding[data-severity="medium"] { border-left-color: var(--nc-warn); }
+.nc-mimo-performance-finding-title { color: var(--nc-text); font-weight: 600; }
+.nc-mimo-performance-limit { margin-top: 8px; color: var(--nc-text-muted); font-size: 10px; line-height: 1.5; }
 `;
 
 interface MimoRootCause {
@@ -320,9 +349,10 @@ function getErrorSourceLabel(source: MimoDiagnosisErrorContext['source']): strin
 function toSafeUrl(rawUrl: string, baseUrl = window.location.href): string {
   try {
     const url = new URL(rawUrl, baseUrl);
-    return `${url.origin}${url.pathname}`;
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return `[${url.protocol || 'unknown'} resource omitted]`;
+    return redactText(`${url.origin}${url.pathname}`);
   } catch {
-    return redactText(rawUrl.split('?')[0]);
+    return redactText(rawUrl.split(/[?#]/, 1)[0]);
   }
 }
 
@@ -335,7 +365,7 @@ function getRuntimeContext(): Record<string, unknown> {
 
   return {
     page: {
-      url: `${window.location.origin}${window.location.pathname}`,
+      url: toSafeUrl(window.location.href),
       title: redactText(document.title),
       referrer: document.referrer ? toSafeUrl(document.referrer) : undefined,
       readyState: document.readyState,
@@ -501,6 +531,68 @@ function normalizeDiagnosis(content: string): MimoDiagnosisResult | undefined {
   }
 }
 
+/** 复用同一 NewAPI 请求、重试和 reasoning-only 兼容边界。 */
+async function requestStructuredDiagnosis<T>(input: {
+  apiKey: string;
+  systemPrompt: string;
+  snapshotTag: 'debug_snapshot' | 'performance_snapshot';
+  snapshot: string;
+  controller: AbortController;
+  fetchInternal: (resource: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+  runActivity: <V>(callback: () => V) => V;
+  normalize: (content: string) => T | undefined;
+  onRetry: () => void;
+}): Promise<T> {
+  let completion: MimoChatCompletion | undefined;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    if (attempt === 1) input.runActivity(input.onRetry);
+    const retryInstruction = attempt === 1
+      ? '\n上一次回复不是完整合法的 JSON。请仅输出完整 JSON，所有字段保持精简，禁止输出解释或 Markdown。'
+      : '';
+    const response = await input.runActivity(() => input.fetchInternal(MIMO_CHAT_URL, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${input.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: MIMO_MODEL,
+          messages: [
+            { role: 'system', content: input.systemPrompt },
+            {
+              role: 'user',
+              content: `请分析以下受控调试快照并严格按 JSON 结构返回。${retryInstruction}\n<${input.snapshotTag}>\n${input.snapshot}\n</${input.snapshotTag}>`,
+            },
+          ],
+          max_completion_tokens: MAX_COMPLETION_TOKENS,
+          stream: false,
+          thinking: { type: 'disabled' },
+        }),
+        credentials: 'omit',
+        referrerPolicy: 'strict-origin',
+        signal: input.controller.signal,
+      }));
+
+    if (!response.ok) throw new DiagnosisRequestError(`模型服务请求失败（HTTP ${response.status}）。`);
+    const responseText = await response.text();
+    const diagnosis = input.runActivity(() => {
+      completion = getResponseContent(JSON.parse(responseText) as unknown);
+      return completion.content ? input.normalize(completion.content) : undefined;
+    });
+    if (diagnosis) return diagnosis;
+  }
+
+  const reason = completion?.finishReason === 'length'
+    ? completion.reasoningContent && !completion.content
+      ? '模型推理内容耗尽了输出额度，未生成最终 JSON，'
+      : '模型输出达到长度上限，'
+    : completion?.reasoningContent && !completion.content
+      ? '模型只返回了推理内容，未返回最终 JSON，'
+      : '模型没有返回完整 JSON，';
+  throw new DiagnosisRequestError(`${reason}已自动重试一次仍未成功，请再次点击分析。`);
+}
+
 function isMimoChatRequest(rawUrl: string, method: string): boolean {
   if (method !== 'POST') return false;
   try {
@@ -530,12 +622,21 @@ export function createMimoAIDiagnosisPlugin(options: MimoAIDiagnosisOptions = {}
   let errorList: HTMLElement | undefined;
   let statusElement: HTMLElement | undefined;
   let resultElement: HTMLElement | undefined;
+  let performanceEvidenceElement: HTMLElement | undefined;
+  let performanceResultElement: HTMLElement | undefined;
+  let performanceButton: HTMLButtonElement | undefined;
   let cancelButton: HTMLButtonElement | undefined;
   let activeController: AbortController | undefined;
   let activeEntryId: number | undefined;
+  let activeAnalysisKind: 'error' | 'performance' | undefined;
   let errorListRenderFrame: number | null = null;
   let removeIgnoredRequestRule: (() => void) | undefined;
+  const performanceCollector = new PerformanceSnapshotCollector();
   const cleanups: Array<() => void> = [];
+
+  function runActivity<T>(callback: () => T): T {
+    return api ? api.networkCore.getPerformanceIsolation().runActivity(callback) : callback();
+  }
 
   function getApiKey(): string {
     // Key 只从当前输入框即时读取，不提升为插件状态或持久化配置。
@@ -550,6 +651,12 @@ export function createMimoAIDiagnosisPlugin(options: MimoAIDiagnosisOptions = {}
 
   function setCancelVisible(visible: boolean): void {
     if (cancelButton) cancelButton.hidden = !visible;
+  }
+
+  function updatePerformanceButton(): void {
+    if (!performanceButton) return;
+    performanceButton.disabled = !getApiKey() || Boolean(activeController);
+    performanceButton.textContent = activeAnalysisKind === 'performance' ? '诊断中…' : '一键诊断当前页面';
   }
 
   function renderResult(result?: MimoDiagnosisResult): void {
@@ -607,6 +714,7 @@ export function createMimoAIDiagnosisPlugin(options: MimoAIDiagnosisOptions = {}
 
   async function buildSnapshot(entry: LogEntry): Promise<string> {
     if (!api) throw new DiagnosisRequestError('诊断插件尚未初始化。');
+    const pluginApi = api;
     const error = getErrorContext(entry);
     const runtime = getRuntimeContext();
     const runtimeForProvider: MimoDiagnosisRuntimeContext = {
@@ -619,32 +727,133 @@ export function createMimoAIDiagnosisPlugin(options: MimoAIDiagnosisOptions = {}
     if (options.contextProvider) {
       try {
         const provided = await options.contextProvider({ error, runtime: runtimeForProvider });
-        const sanitizedContext = sanitizeValue(provided);
-        applicationContext = isRecord(sanitizedContext)
-          ? sanitizedContext
-          : { value: sanitizedContext };
+        applicationContext = runActivity(() => {
+          const sanitizedContext = sanitizeValue(provided);
+          return isRecord(sanitizedContext)
+            ? sanitizedContext
+            : { value: sanitizedContext };
+        });
       } catch {
         applicationContext = { contextProvider: '业务上下文提供器执行失败。' };
       }
     }
 
-    const snapshot: DiagnosisSnapshot = {
-      schemaVersion: 1,
-      selectedError: {
-        ...error,
-        logArguments: entry.args.map((arg) => sanitizeValue(arg)),
-      },
-      runtime,
-      breadcrumbs: createBreadcrumbs(api.consoleCore.getEntries(), entry),
-      network: createNetworkContext(api.networkCore.getEntries(), entry.timestamp),
-      applicationContext,
-    };
+    return runActivity(() => {
+      const snapshot: DiagnosisSnapshot = {
+        schemaVersion: 1,
+        selectedError: {
+          ...error,
+          logArguments: entry.args.map((arg) => sanitizeValue(arg)),
+        },
+        runtime,
+        breadcrumbs: createBreadcrumbs(pluginApi.consoleCore.getEntries(), entry),
+        network: createNetworkContext(pluginApi.networkCore.getEntries(), entry.timestamp),
+        applicationContext,
+      };
 
-    return shrinkSnapshot(snapshot);
+      return shrinkSnapshot(snapshot);
+    });
+  }
+
+  function buildPerformanceSnapshot(): {
+    serialized: string;
+    performance: PerformanceSnapshot;
+    findings: LocalPerformanceFinding[];
+  } {
+    if (!api) throw new DiagnosisRequestError('诊断插件尚未初始化。');
+    const performanceSnapshot = performanceCollector.getSnapshot();
+    const findings = createLocalPerformanceFindings(performanceSnapshot);
+    const recentErrors = collectRecentErrors(api.consoleCore.getEntries(), 5).map((entry) => {
+      const error = getErrorContext(entry);
+      return {
+        timestamp: new Date(entry.timestamp).toISOString(),
+        source: error.source,
+        name: error.name,
+        message: error.message,
+      };
+    });
+    const snapshot: PerformanceDiagnosisSnapshot = {
+      schemaVersion: 1,
+      performance: performanceSnapshot,
+      localFindings: findings,
+      network: createPerformanceNetworkContext(api.networkCore.getEntries(), MAX_NETWORK_ENTRIES),
+      recentErrors,
+    };
+    return {
+      serialized: serializePerformanceSnapshot(snapshot, MAX_SNAPSHOT_CHARS),
+      performance: performanceSnapshot,
+      findings,
+    };
+  }
+
+  async function analyzePerformance(): Promise<void> {
+    if (!api) return;
+    const fetchInternal = api.networkCore.fetchInternal.bind(api.networkCore);
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      setStatus('请输入 NewAPI API Key 后再诊断性能。', 'error');
+      keyInput?.focus();
+      return;
+    }
+    if (activeController) return;
+
+    activeAnalysisKind = 'performance';
+    activeEntryId = undefined;
+    activeController = new AbortController();
+    const controller = activeController;
+    setStatus('正在冻结当前会话性能快照并请求 AI 诊断…', 'loading');
+    setCancelVisible(true);
+    updatePerformanceButton();
+    renderErrorList();
+    renderPerformanceResult(performanceResultElement);
+
+    try {
+      // 在发起诊断请求之前冻结证据，避免模型请求本身污染网络和主线程结论。
+      const snapshot = buildPerformanceSnapshot();
+      renderPerformanceEvidence(performanceEvidenceElement, snapshot.performance, snapshot.findings);
+      const diagnosis = await requestStructuredDiagnosis({
+        apiKey,
+        systemPrompt: PERFORMANCE_DIAGNOSIS_SYSTEM_PROMPT,
+        snapshotTag: 'performance_snapshot',
+        snapshot: snapshot.serialized,
+        controller,
+        fetchInternal,
+        runActivity,
+        normalize: normalizePerformanceDiagnosis,
+        onRetry: () => setStatus('模型返回了不完整的性能诊断 JSON，正在自动重试一次…', 'loading'),
+      });
+      if (activeController !== controller) return;
+      runActivity(() => {
+        renderPerformanceResult(performanceResultElement, diagnosis);
+        setStatus('性能诊断完成。');
+      });
+    } catch (error) {
+      if (activeController !== controller) return;
+      runActivity(() => {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          setStatus('已取消本次性能诊断。');
+        } else if (error instanceof DiagnosisRequestError) {
+          setStatus(error.message, 'error');
+        } else {
+          setStatus('无法连接模型服务，请检查网络、API Key 或服务端 CORS 配置。', 'error');
+        }
+      });
+    } finally {
+      if (activeController === controller) {
+        runActivity(() => {
+          activeController = undefined;
+          activeAnalysisKind = undefined;
+          setCancelVisible(false);
+          updatePerformanceButton();
+          renderErrorList();
+        });
+      }
+    }
   }
 
   async function analyze(entry: LogEntry): Promise<void> {
     if (!api) return;
+    const fetchInternal = api.networkCore.fetchInternal.bind(api.networkCore);
     const apiKey = getApiKey();
     if (!apiKey) {
       setStatus('请输入 NewAPI API Key 后再分析。', 'error');
@@ -653,89 +862,55 @@ export function createMimoAIDiagnosisPlugin(options: MimoAIDiagnosisOptions = {}
     }
     if (activeController) return;
 
+    activeAnalysisKind = 'error';
     activeEntryId = entry.id;
     activeController = new AbortController();
     const controller = activeController;
     setStatus('正在整理上下文并请求 AI 诊断…', 'loading');
     setCancelVisible(true);
+    updatePerformanceButton();
     renderResult();
     renderErrorList();
 
     try {
       const snapshot = await buildSnapshot(entry);
-      let completion: MimoChatCompletion | undefined;
-      let diagnosis: MimoDiagnosisResult | undefined;
-
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        if (attempt === 1) {
-          setStatus('模型返回了不完整的 JSON，正在自动重试一次…', 'loading');
-        }
-        const retryInstruction = attempt === 1
-          ? '\n上一次回复不是完整合法的 JSON。请仅输出完整 JSON，所有字段保持精简，禁止输出解释或 Markdown。'
-          : '';
-        const response = await window.fetch(MIMO_CHAT_URL, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: MIMO_MODEL,
-            messages: [
-              { role: 'system', content: DIAGNOSIS_SYSTEM_PROMPT },
-              {
-                role: 'user',
-                content: `请分析以下受控调试快照并严格按 JSON 结构返回。${retryInstruction}\n<debug_snapshot>\n${snapshot}\n</debug_snapshot>`,
-              },
-            ],
-            max_completion_tokens: MAX_COMPLETION_TOKENS,
-            // 诊断结果必须稳定落在 content 中，避免思考过程耗尽输出额度。
-            stream: false,
-            thinking: { type: 'disabled' },
-          }),
-          credentials: 'omit',
-          referrerPolicy: 'strict-origin',
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          throw new DiagnosisRequestError(`模型服务请求失败（HTTP ${response.status}）。`);
-        }
-        completion = getResponseContent(await response.json());
-        if (activeController !== controller) return;
-        // reasoning_content 仅用于识别推理截断，不能作为诊断结果渲染，避免泄露模型思考过程。
-        diagnosis = completion.content ? normalizeDiagnosis(completion.content) : undefined;
-        if (diagnosis) break;
-      }
-
-      if (!diagnosis) {
-        const reason = completion?.finishReason === 'length'
-          ? completion.reasoningContent && !completion.content
-            ? '模型推理内容耗尽了输出额度，未生成最终 JSON，'
-            : '模型输出达到长度上限，'
-          : completion?.reasoningContent && !completion.content
-            ? '模型只返回了推理内容，未返回最终 JSON，'
-            : '模型没有返回完整 JSON，';
-        throw new DiagnosisRequestError(`${reason}已自动重试一次仍未成功，请再次点击分析。`);
-      }
-
-      renderResult(diagnosis);
-      setStatus('分析完成。');
+      const diagnosis = await requestStructuredDiagnosis({
+        apiKey,
+        systemPrompt: DIAGNOSIS_SYSTEM_PROMPT,
+        snapshotTag: 'debug_snapshot',
+        snapshot,
+        controller,
+        fetchInternal,
+        runActivity,
+        normalize: normalizeDiagnosis,
+        onRetry: () => setStatus('模型返回了不完整的 JSON，正在自动重试一次…', 'loading'),
+      });
+      if (activeController !== controller) return;
+      runActivity(() => {
+        renderResult(diagnosis);
+        setStatus('分析完成。');
+      });
     } catch (error) {
       if (activeController !== controller) return;
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        setStatus('已取消本次分析。');
-      } else if (error instanceof DiagnosisRequestError) {
-        setStatus(error.message, 'error');
-      } else {
-        setStatus('无法连接模型服务，请检查网络、API Key 或服务端 CORS 配置。', 'error');
-      }
+      runActivity(() => {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          setStatus('已取消本次分析。');
+        } else if (error instanceof DiagnosisRequestError) {
+          setStatus(error.message, 'error');
+        } else {
+          setStatus('无法连接模型服务，请检查网络、API Key 或服务端 CORS 配置。', 'error');
+        }
+      });
     } finally {
       if (activeController === controller) {
-        activeController = undefined;
-        activeEntryId = undefined;
-        setCancelVisible(false);
-        renderErrorList();
+        runActivity(() => {
+          activeController = undefined;
+          activeEntryId = undefined;
+          activeAnalysisKind = undefined;
+          setCancelVisible(false);
+          updatePerformanceButton();
+          renderErrorList();
+        });
       }
     }
   }
@@ -743,8 +918,10 @@ export function createMimoAIDiagnosisPlugin(options: MimoAIDiagnosisOptions = {}
   function scheduleErrorListRender(): void {
     if (!errorList || errorListRenderFrame !== null) return;
     errorListRenderFrame = window.requestAnimationFrame(() => {
-      errorListRenderFrame = null;
-      renderErrorList();
+      runActivity(() => {
+        errorListRenderFrame = null;
+        renderErrorList();
+      });
     });
   }
 
@@ -816,13 +993,16 @@ export function createMimoAIDiagnosisPlugin(options: MimoAIDiagnosisOptions = {}
     keyInput.className = 'nc-mimo-key-input';
     keyInput.type = 'password';
     keyInput.placeholder = '仅保留在当前输入框中';
-    keyInput.value = '';
+    keyInput.value = 'sk-n75F4dOlcaUjLXG22FgwrpNGjxImRPn0EhsO9vDuokw6tSQd';
     keyInput.autocomplete = 'off';
     keyInput.spellcheck = false;
-    keyInput.addEventListener('input', scheduleErrorListRender);
+    keyInput.addEventListener('input', () => {
+      scheduleErrorListRender();
+      updatePerformanceButton();
+    });
     settingsBody.appendChild(keyInput);
     addTextElement(settingsBody, 'div', 'nc-mimo-key-help', `固定请求：${MIMO_CHAT_URL}；固定模型：${MIMO_MODEL}。`);
-    statusElement = addTextElement(settingsBody, 'div', 'nc-mimo-status', '输入 API Key 后可手动分析错误。');
+    statusElement = addTextElement(settingsBody, 'div', 'nc-mimo-status', '输入 API Key 后可诊断当前页面性能或分析最近错误。');
     statusElement.setAttribute('aria-live', 'polite');
     cancelButton = document.createElement('button');
     cancelButton.type = 'button';
@@ -834,6 +1014,39 @@ export function createMimoAIDiagnosisPlugin(options: MimoAIDiagnosisOptions = {}
     settings.appendChild(settingsBody);
     scroll.appendChild(settings);
 
+    const performanceSection = document.createElement('section');
+    performanceSection.className = 'nc-mimo-section';
+    addTextElement(performanceSection, 'div', 'nc-mimo-section-title', '前端性能一键诊断');
+    const performanceBody = document.createElement('div');
+    performanceBody.className = 'nc-mimo-section-body';
+    addTextElement(
+      performanceBody,
+      'div',
+      'nc-mimo-notice',
+      '分析当前会话的首屏加载、LCP、CLS、INP、资源、网络和主线程证据。单次样本不等同于线上真实用户指标。',
+    );
+    const performanceAction = document.createElement('div');
+    performanceAction.className = 'nc-mimo-performance-action';
+    performanceButton = document.createElement('button');
+    performanceButton.type = 'button';
+    performanceButton.className = 'nc-mimo-button';
+    performanceButton.setAttribute('aria-label', '一键诊断当前页面前端性能');
+    performanceButton.addEventListener('click', () => void analyzePerformance());
+    performanceAction.appendChild(performanceButton);
+    performanceBody.appendChild(performanceAction);
+    performanceEvidenceElement = document.createElement('div');
+    performanceBody.appendChild(performanceEvidenceElement);
+    performanceSection.appendChild(performanceBody);
+    scroll.appendChild(performanceSection);
+
+    const performanceResultSection = document.createElement('section');
+    performanceResultSection.className = 'nc-mimo-section';
+    addTextElement(performanceResultSection, 'div', 'nc-mimo-section-title', 'AI 性能优化建议');
+    performanceResultElement = document.createElement('div');
+    performanceResultElement.className = 'nc-mimo-section-body nc-mimo-result';
+    performanceResultSection.appendChild(performanceResultElement);
+    scroll.appendChild(performanceResultSection);
+
     const errors = document.createElement('section');
     errors.className = 'nc-mimo-section';
     addTextElement(errors, 'div', 'nc-mimo-section-title', '最近错误');
@@ -844,13 +1057,21 @@ export function createMimoAIDiagnosisPlugin(options: MimoAIDiagnosisOptions = {}
 
     const result = document.createElement('section');
     result.className = 'nc-mimo-section';
-    addTextElement(result, 'div', 'nc-mimo-section-title', '诊断结果');
+    addTextElement(result, 'div', 'nc-mimo-section-title', '错误诊断结果');
     resultElement = document.createElement('div');
     resultElement.className = 'nc-mimo-section-body nc-mimo-result';
     result.appendChild(resultElement);
     scroll.appendChild(result);
 
     container.appendChild(view);
+    const initialPerformanceSnapshot = performanceCollector.getSnapshot();
+    renderPerformanceEvidence(
+      performanceEvidenceElement,
+      initialPerformanceSnapshot,
+      createLocalPerformanceFindings(initialPerformanceSnapshot),
+    );
+    renderPerformanceResult(performanceResultElement);
+    updatePerformanceButton();
     renderErrorList();
     renderResult();
   }
@@ -860,6 +1081,9 @@ export function createMimoAIDiagnosisPlugin(options: MimoAIDiagnosisOptions = {}
     version: '1.0.0',
     init(pluginApi) {
       api = pluginApi;
+      // 指标需要从插件初始化阶段开始观察，不能等用户点击按钮后才采集。
+      performanceCollector.setPerformanceIsolation(pluginApi.networkCore.getPerformanceIsolation());
+      performanceCollector.start();
       // 必须在 NetworkCore 读取 request header/body 之前排除该请求，防止 Key 和快照反向泄露。
       removeIgnoredRequestRule = pluginApi.networkCore.addFetchIgnoreRule(isMimoChatRequest);
       cleanups.push(
@@ -881,6 +1105,9 @@ export function createMimoAIDiagnosisPlugin(options: MimoAIDiagnosisOptions = {}
         errorList = undefined;
         statusElement = undefined;
         resultElement = undefined;
+        performanceEvidenceElement = undefined;
+        performanceResultElement = undefined;
+        performanceButton = undefined;
         cancelButton = undefined;
       },
     },
@@ -888,6 +1115,8 @@ export function createMimoAIDiagnosisPlugin(options: MimoAIDiagnosisOptions = {}
       activeController?.abort();
       activeController = undefined;
       activeEntryId = undefined;
+      activeAnalysisKind = undefined;
+      performanceCollector.destroy();
       if (errorListRenderFrame !== null) {
         window.cancelAnimationFrame(errorListRenderFrame);
         errorListRenderFrame = null;

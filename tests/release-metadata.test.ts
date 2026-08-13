@@ -94,6 +94,28 @@ describe('release metadata', () => {
     expect(source).not.toMatch(/['"`]sk-[A-Za-z0-9_-]{16,}['"`]/);
   });
 
+  it('keeps one-click performance diagnosis on the existing protected AI request path', () => {
+    const source = readFileSync(
+      resolve(root, 'src/plugins/mimo-ai-diagnosis-plugin.ts'),
+      'utf8',
+    );
+    const sourcePlugin = readFileSync(resolve(root, 'src/plugins/source-plugin.ts'), 'utf8');
+    const readme = readFileSync(resolve(root, 'README.zh-CN.md'), 'utf8');
+
+    expect(source).toContain("snapshotTag: 'performance_snapshot'");
+    expect(source).toContain('performanceCollector.start()');
+    expect(source).toContain('performanceCollector.destroy()');
+    expect(source).toContain('一键诊断当前页面');
+    expect(source).not.toContain('localStorage.setItem');
+    expect(source).not.toContain('sessionStorage.setItem');
+    expect(readme).toContain('首屏加载、LCP、CLS、INP、资源、网络和主线程性能');
+    expect(readme).toContain('不会发送请求头、请求/响应 body、Cookie、浏览器存储或 URL 查询参数');
+    expect(readme).toContain('重复诊断不会把上一轮模型请求计入资源汇总');
+    expect(source).toContain('fetchInternal');
+    expect(sourcePlugin).toContain('networkCore.fetchInternal');
+    expect(sourcePlugin).not.toContain('await fetch(');
+  });
+
   it('keeps the documented AI diagnosis destination aligned with the runtime', () => {
     const source = readFileSync(
       resolve(root, 'src/plugins/mimo-ai-diagnosis-plugin.ts'),
