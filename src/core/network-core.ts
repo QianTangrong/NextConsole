@@ -4,7 +4,12 @@
 import type { NetworkEntry, NetworkOptions } from '../types';
 import { EventEmitter } from '../utils/event-emitter';
 import { normalizeRetentionLimit } from '../utils/bounded-buffer';
-import { FetchInterceptor } from './network/fetch-interceptor';
+import {
+  getNconsolePerformanceIsolation,
+  markNconsoleResourceRequest,
+  type NconsolePerformanceIsolation,
+} from '../utils/performance-isolation';
+import { FetchInterceptor, markFetchAsNconsoleInternal } from './network/fetch-interceptor';
 import { NetworkCaptureStore } from './network/network-capture';
 import { SSEInterceptor } from './network/sse-interceptor';
 import { WebSocketInterceptor } from './network/websocket-interceptor';
@@ -38,6 +43,7 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
   private readonly xhrInterceptor: XHRInterceptor;
   private readonly sseInterceptor: SSEInterceptor;
   private readonly webSocketInterceptor: WebSocketInterceptor;
+  private readonly performanceIsolation = getNconsolePerformanceIsolation();
   private hooked = false;
 
   constructor(options?: Partial<NetworkOptions>) {
@@ -80,6 +86,20 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
     return this.fetchInterceptor.addIgnoreRule(rule);
   }
 
+  /**
+   * 供可信插件发起内部 fetch：不进入 Network 面板，并同步登记到性能隔离层。
+   * 标记随 RequestInit 穿过嵌套 Hook，不依赖易误伤业务请求的长期 URL 黑名单。
+   */
+  fetchInternal(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    markNconsoleResourceRequest(getRequestUrl(input));
+    return window.fetch(input, markFetchAsNconsoleInternal(init));
+  }
+
+  /** 让独立插件复用当前 Core 的自身噪声登记表，避免各分包产生互不相识的隔离状态。 */
+  getPerformanceIsolation(): NconsolePerformanceIsolation {
+    return this.performanceIsolation;
+  }
+
   getEntries(): NetworkEntry[] {
     return this.captureStore.getEntries();
   }
@@ -103,4 +123,10 @@ export class NetworkCore extends EventEmitter<NetworkEvents> {
     this.xhrInterceptor.restore();
     this.fetchInterceptor.restore();
   }
+}
+
+function getRequestUrl(input: RequestInfo | URL): string {
+  if (typeof input === 'string') return input;
+  if (input instanceof URL) return input.href;
+  return input.url;
 }

@@ -10,6 +10,7 @@ import { finishNetworkEntry, type NetworkCaptureSink } from './network-capture';
 
 export type FetchIgnoreRule = (url: string, method: string) => boolean;
 
+const INTERNAL_FETCH_MARKER = Symbol.for('nconsole.internal-fetch.v1');
 const MAX_BODY_PREVIEW_CHARS = 10000;
 const MAX_BODY_PREVIEW_BYTES = 10000;
 const STREAMING_CONTENT_TYPES = [
@@ -39,6 +40,19 @@ function getFetchURL(input: RequestInfo | URL): string {
 
 function getFetchMethod(input: RequestInfo | URL, init?: RequestInit): string {
   return (init?.method || (isRequest(input) ? input.method : 'GET')).toUpperCase();
+}
+
+/** 给可信插件请求添加不可序列化标记，使所有嵌套 Nconsole fetch Hook 在读取敏感元数据前直接放行。 */
+export function markFetchAsNconsoleInternal(init: RequestInit = {}): RequestInit {
+  return {
+    ...init,
+    [INTERNAL_FETCH_MARKER]: true,
+  } as RequestInit;
+}
+
+function isNconsoleInternalFetch(init?: RequestInit): boolean {
+  if (!init) return false;
+  return Boolean((init as RequestInit & Record<PropertyKey, unknown>)[INTERNAL_FETCH_MARKER]);
 }
 
 function collectFetchHeaders(input: RequestInfo | URL, init?: RequestInit): Record<string, string> {
@@ -90,7 +104,7 @@ export class FetchInterceptor {
       const method = getFetchMethod(input, init);
 
       // 先判断再读取 header/body，避免调试工具自身的凭据和诊断内容被记录下来。
-      if (self.shouldIgnore(url, method)) {
+      if (isNconsoleInternalFetch(init) || self.shouldIgnore(url, method)) {
         return link.previous.call(window, input, init);
       }
       const requestHeaders = collectFetchHeaders(input, init);

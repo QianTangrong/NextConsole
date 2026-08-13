@@ -17,6 +17,7 @@ import { ReplPanel } from './repl-panel';
 import { THEME_CSS } from '../styles/theme';
 import { createAIExport } from '../utils/ai-export';
 import { on, clamp } from '../utils/dom';
+import { beginNconsoleActivity, runNconsoleActivity } from '../utils/performance-isolation';
 
 const TABS: { key: PanelTab; label: string }[] = [
   { key: 'console', label: 'Console' },
@@ -69,27 +70,51 @@ export class MainPanel {
   private config: NconsoleCoreConfig;
 
   constructor(config: NconsoleCoreConfig = {}) {
-    this.config = config;
-    this.activeTab = config.defaultTab || 'console';
+    const finishActivity = beginNconsoleActivity();
+    try {
+      this.config = config;
+      this.activeTab = config.defaultTab || 'console';
 
-    // Create isolated host element with Shadow DOM
-    this.host = document.createElement('div');
-    this.host.id = 'nconsole-host';
-    this.shadow = this.host.attachShadow({ mode: 'closed' });
+      // Create isolated host element with Shadow DOM
+      this.host = document.createElement('div');
+      this.host.id = 'nconsole-host';
+      this.shadow = this.host.attachShadow({ mode: 'closed' });
+      this.registerPerformanceIsolationBoundary();
 
-    // Core modules
-    this.consoleCore = new ConsoleCore(config.console);
-    this.networkCore = new NetworkCore(config.network);
-    this.storageCore = new StorageCore(config.storage);
-    this.elementCore = new ElementCore();
-    this.replCore = new ReplCore();
+      // Core modules
+      this.consoleCore = new ConsoleCore(config.console);
+      this.networkCore = new NetworkCore(config.network);
+      this.storageCore = new StorageCore(config.storage);
+      this.elementCore = new ElementCore();
+      this.replCore = new ReplCore();
 
-    // 默认不加载，避免未启用时出现额外 Tab、监听或诊断数据收集。
+      // 默认不加载，避免未启用时出现额外 Tab、监听或诊断数据收集。
+    } finally {
+      finishActivity();
+    }
+  }
+
+  /** 从 Shadow DOM 捕获工具界面事件，登记同步处理区间供长任务统计精确扣除。 */
+  private registerPerformanceIsolationBoundary(): void {
+    const eventTypes = 'click dblclick input change keydown keyup pointerdown pointermove pointerup pointercancel wheel scroll'.split(' ');
+    const onCapture = (): void => {
+      const finish = beginNconsoleActivity();
+      // 第二个微任务同时覆盖事件处理器自己排入的第一层微任务，不跨到后续宏任务。
+      queueMicrotask(() => queueMicrotask(finish));
+    };
+    for (const type of eventTypes) {
+      this.shadow.addEventListener(type, onCapture, true);
+    }
+    this.cleanups.push(() => {
+      for (const type of eventTypes) {
+        this.shadow.removeEventListener(type, onCapture, true);
+      }
+    });
   }
 
   /** 初始化核心模块与界面；挂载函数可等待 DOM 就绪后安全执行。 */
   init(onFatalError?: (error: unknown) => void): void {
-    const mount = () => {
+    const mount = () => runNconsoleActivity(() => {
       if (this.destroyed || this.mounted) return;
 
       try {
@@ -150,7 +175,7 @@ export class MainPanel {
         }
         throw error;
       }
-    };
+    });
 
     // Ensure DOM is ready before mounting
     if (document.body) {
@@ -326,8 +351,10 @@ export class MainPanel {
       pendingHeight = newHeight;
       if (resizeFrame === null) {
         resizeFrame = requestAnimationFrame(() => {
-          resizeFrame = null;
-          flushHeight();
+          runNconsoleActivity(() => {
+            resizeFrame = null;
+            flushHeight();
+          });
         });
       }
     };
@@ -357,16 +384,20 @@ export class MainPanel {
 
   /** 显示面板并触发外部可观测的 show 事件。 */
   show(): void {
-    if (this.visible) return;
-    this.visible = true;
-    this.applyVisibility();
+    runNconsoleActivity(() => {
+      if (this.visible) return;
+      this.visible = true;
+      this.applyVisibility();
+    });
   }
 
   /** 隐藏面板，但保留已采集数据与各子面板状态。 */
   hide(): void {
-    if (!this.visible) return;
-    this.visible = false;
-    this.applyVisibility();
+    runNconsoleActivity(() => {
+      if (!this.visible) return;
+      this.visible = false;
+      this.applyVisibility();
+    });
   }
 
   private applyVisibility(): void {
@@ -384,11 +415,13 @@ export class MainPanel {
 
   /** 在显示与隐藏状态间切换。 */
   toggle(): void {
-    if (this.visible) {
-      this.hide();
-    } else {
-      this.show();
-    }
+    runNconsoleActivity(() => {
+      if (this.visible) {
+        this.hide();
+      } else {
+        this.show();
+      }
+    });
   }
 
   /** 返回当前面板是否可见。 */
@@ -442,7 +475,7 @@ export class MainPanel {
 
   /** 运行时切换主题，主题类只应用于 Nconsole 根节点。 */
   setTheme(theme: 'dark' | 'light'): void {
-    this.applyTheme(theme);
+    runNconsoleActivity(() => this.applyTheme(theme));
   }
 
   private applyTheme(theme: 'dark' | 'light'): void {
@@ -455,13 +488,15 @@ export class MainPanel {
 
   /** 注册插件；同名插件仅保留首次注册的实例，避免重复钩子和标签。 */
   use(plugin: NconsolePlugin): void {
-    // 名称既是插件身份也是标签键，重复安装会造成生命周期难以对称清理。
-    if (this.plugins.some((p) => p.name === plugin.name)) return;
-    this.plugins.push(plugin);
+    runNconsoleActivity(() => {
+      // 名称既是插件身份也是标签键，重复安装会造成生命周期难以对称清理。
+      if (this.plugins.some((p) => p.name === plugin.name)) return;
+      this.plugins.push(plugin);
 
-    if (this.initialized) {
-      this.initPlugin(plugin);
-    }
+      if (this.initialized) {
+        this.initPlugin(plugin);
+      }
+    });
   }
 
   /** 延迟创建插件 API，确保所有插件共享同一组核心实例和样式注入入口。 */

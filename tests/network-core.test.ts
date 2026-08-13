@@ -3,6 +3,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NetworkCore } from '../src/core/network-core';
 import { NetworkCaptureStore } from '../src/core/network/network-capture';
 import type { NetworkEntry } from '../src/types';
+import {
+  clearNconsolePerformanceIsolation,
+} from '../src/utils/performance-isolation';
 
 type WindowHarness = {
   window: Window & typeof globalThis;
@@ -29,6 +32,7 @@ function installWindow(overrides: Partial<Window & typeof globalThis> = {}): Win
 }
 
 afterEach(() => {
+  clearNconsolePerformanceIsolation();
   vi.unstubAllGlobals();
 });
 
@@ -211,6 +215,37 @@ describe('NetworkCore', () => {
       await window.fetch('/diagnosis', { method: 'POST', body: 'secret' });
       expect(core.getEntries()).toEqual([]);
       expect(nativeFetch).toHaveBeenCalledOnce();
+    } finally {
+      core.destroy();
+    }
+  });
+
+  it('keeps trusted plugin fetches out of Network capture and registers their resource timing', async () => {
+    const nativeFetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => (
+      new Response(null, { status: 204 })
+    ));
+    const { window } = installWindow({ fetch: nativeFetch as typeof fetch });
+    vi.stubGlobal('performance', { now: vi.fn(() => 250) });
+    vi.stubGlobal('location', { href: 'https://example.com/page' });
+    const core = new NetworkCore({
+      hookFetch: true,
+      hookXHR: false,
+      hookSSE: false,
+      hookWebSocket: false,
+      maxRequests: 10,
+    });
+
+    try {
+      core.init();
+      await core.fetchInternal('/source.js?cache=1', { method: 'GET', headers: { 'x-internal': '1' } });
+
+      expect(core.getEntries()).toEqual([]);
+      expect(nativeFetch).toHaveBeenCalledOnce();
+      expect(nativeFetch.mock.calls[0][1]).toMatchObject({ method: 'GET', headers: { 'x-internal': '1' } });
+      const isolation = core.getPerformanceIsolation();
+      expect(isolation.isResourceTiming({ name: 'https://example.com/source.js?cache=1', startTime: 250 })).toBe(true);
+      // 同一路径的页面早期业务资源不能被内部请求记录误伤。
+      expect(isolation.isResourceTiming({ name: 'https://example.com/source.js?cache=0', startTime: 100 })).toBe(false);
     } finally {
       core.destroy();
     }

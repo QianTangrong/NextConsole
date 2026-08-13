@@ -203,8 +203,13 @@ function getDisplayName(entry: SourceEntry): string {
 /** 创建只读源码检查插件，避免对宿主脚本和样式产生任何修改。 */
 export function createSourcePlugin(): NconsolePlugin {
   let container: HTMLElement;
+  let pluginApi: PluginAPI | undefined;
   let activeController: AbortController | null = null;
   let renderVersion = 0;
+
+  function runActivity<T>(callback: () => T): T {
+    return pluginApi ? pluginApi.networkCore.getPerformanceIsolation().runActivity(callback) : callback();
+  }
 
   function cancelPendingRequest(): void {
     renderVersion += 1;
@@ -213,45 +218,46 @@ export function createSourcePlugin(): NconsolePlugin {
   }
 
   function renderList() {
-    cancelPendingRequest();
-    const sources = collectSources();
-    if (sources.length === 0) {
-      container.innerHTML = '<div class="nc-source-view"><div class="nc-source-empty">No sources found</div></div>';
-      return;
-    }
+    runActivity(() => {
+      cancelPendingRequest();
+      const sources = collectSources();
+      if (sources.length === 0) {
+        container.innerHTML = '<div class="nc-source-view"><div class="nc-source-empty">No sources found</div></div>';
+        return;
+      }
 
-    const listHTML = sources.map((entry, i) => {
-      const tagClass = `nc-source-tag-${entry.type}`;
-      const label = entry.type.replace('-', ' ');
-      const name = escapeHTML(getDisplayName(entry));
-      const meta = entry.url
-        ? escapeHTML(entry.url)
-        : `${formatSize(entry.size || 0)}`;
-      return `<div class="nc-source-item" data-idx="${i}">
-        <span class="nc-source-tag ${tagClass}">${label}</span>
-        <span class="nc-source-name">${name}</span>
-        <div class="nc-source-meta">${meta}</div>
-      </div>`;
-    }).join('');
+      const listHTML = sources.map((entry, i) => {
+        const tagClass = `nc-source-tag-${entry.type}`;
+        const label = entry.type.replace('-', ' ');
+        const name = escapeHTML(getDisplayName(entry));
+        const meta = entry.url
+          ? escapeHTML(entry.url)
+          : `${formatSize(entry.size || 0)}`;
+        return `<div class="nc-source-item" data-idx="${i}">
+          <span class="nc-source-tag ${tagClass}">${label}</span>
+          <span class="nc-source-name">${name}</span>
+          <div class="nc-source-meta">${meta}</div>
+        </div>`;
+      }).join('');
 
-    container.innerHTML = `
-      <div class="nc-source-view">
-        <div class="nc-toolbar">
-          <button class="nc-toolbar-btn nc-source-refresh">Refresh</button>
-          <span style="color:var(--nc-text-muted);font-size:11px;margin-left:8px">${sources.length} sources</span>
-        </div>
-        <div class="nc-source-list">${listHTML}</div>
-      </div>`;
+      container.innerHTML = `
+        <div class="nc-source-view">
+          <div class="nc-toolbar">
+            <button class="nc-toolbar-btn nc-source-refresh">Refresh</button>
+            <span style="color:var(--nc-text-muted);font-size:11px;margin-left:8px">${sources.length} sources</span>
+          </div>
+          <div class="nc-source-list">${listHTML}</div>
+        </div>`;
 
-    container.querySelector('.nc-source-refresh')!.addEventListener('click', renderList);
+      container.querySelector('.nc-source-refresh')!.addEventListener('click', renderList);
 
-    container.querySelector('.nc-source-list')!.addEventListener('click', (e) => {
-      const item = (e.target as HTMLElement).closest('.nc-source-item') as HTMLElement;
-      if (!item) return;
-      const idx = parseInt(item.dataset.idx!, 10);
-      showDetail(sources[idx]);
+      container.querySelector('.nc-source-list')!.addEventListener('click', (e) => {
+        const item = (e.target as HTMLElement).closest('.nc-source-item') as HTMLElement;
+        if (!item) return;
+        const idx = parseInt(item.dataset.idx!, 10);
+        void showDetail(sources[idx]);
+      });
     });
-
   }
 
   async function showDetail(entry: SourceEntry) {
@@ -277,15 +283,18 @@ export function createSourcePlugin(): NconsolePlugin {
       const controller = new AbortController();
       activeController = controller;
       try {
-        const res = await fetch(entry.url, { signal: controller.signal });
+        if (!pluginApi) throw new Error('Source plugin is not initialized');
+        const res = await pluginApi.networkCore.fetchInternal(entry.url, { signal: controller.signal });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        [code, truncated] = await readSourcePreview(res);
+        [code, truncated] = await readSourcePreview(res, runActivity);
       } catch (err) {
         if (controller.signal.aborted || version !== renderVersion) return;
-        const codeEl = container.querySelector('.nc-source-code') as HTMLElement;
-        if (codeEl) {
-          codeEl.innerHTML = `<div class="nc-source-empty" style="color:var(--nc-error)">Failed to fetch: ${escapeHTML(String(err))}</div>`;
-        }
+        runActivity(() => {
+          const codeEl = container.querySelector('.nc-source-code') as HTMLElement;
+          if (codeEl) {
+            codeEl.innerHTML = `<div class="nc-source-empty" style="color:var(--nc-error)">Failed to fetch: ${escapeHTML(String(err))}</div>`;
+          }
+        });
         return;
       } finally {
         if (activeController === controller) activeController = null;
@@ -293,19 +302,21 @@ export function createSourcePlugin(): NconsolePlugin {
     }
     if (version !== renderVersion) return;
 
-    const lines = code.split('\n');
-    const codeEl = container.querySelector('.nc-source-code') as HTMLElement;
-    if (!codeEl) return;
+    runActivity(() => {
+      const lines = code.split('\n');
+      const codeEl = container.querySelector('.nc-source-code') as HTMLElement;
+      if (!codeEl) return;
 
-    const renderCount = Math.min(lines.length, MAX_SOURCE_LINES);
-    let html = '';
-    for (let i = 0; i < renderCount; i++) {
-      html += `<div class="nc-source-line"><span class="nc-source-lineno">${i + 1}</span><span class="nc-source-linetext">${escapeHTML(lines[i])}</span></div>`;
-    }
-    if (lines.length > MAX_SOURCE_LINES || truncated) {
-      html += '<div class="nc-source-empty">... source preview truncated</div>';
-    }
-    codeEl.innerHTML = html;
+      const renderCount = Math.min(lines.length, MAX_SOURCE_LINES);
+      let html = '';
+      for (let i = 0; i < renderCount; i++) {
+        html += `<div class="nc-source-line"><span class="nc-source-lineno">${i + 1}</span><span class="nc-source-linetext">${escapeHTML(lines[i])}</span></div>`;
+      }
+      if (lines.length > MAX_SOURCE_LINES || truncated) {
+        html += '<div class="nc-source-empty">... source preview truncated</div>';
+      }
+      codeEl.innerHTML = html;
+    });
   }
 
   return {
@@ -315,19 +326,24 @@ export function createSourcePlugin(): NconsolePlugin {
       label: 'Source',
       render(el, api) {
         container = el;
+        pluginApi = api;
         api.addStyle(SOURCE_CSS);
         renderList();
       },
       destroy() {
         cancelPendingRequest();
         container.innerHTML = '';
+        pluginApi = undefined;
       },
     },
   };
 }
 
 /** 逐块读取远程源码，到达预览上限后主动取消副本读取。 */
-async function readSourcePreview(response: Response): Promise<[string, boolean]> {
+async function readSourcePreview(
+  response: Response,
+  runActivity: <T>(callback: () => T) => T,
+): Promise<[string, boolean]> {
   if (!response.body) return ['', false];
 
   const reader = response.body.getReader();
@@ -337,14 +353,18 @@ async function readSourcePreview(response: Response): Promise<[string, boolean]>
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    text += decoder.decode(value, { stream: true });
-    if (text.length > MAX_SOURCE_CHARS) {
+    const reachedLimit = runActivity(() => {
+      text += decoder.decode(value, { stream: true });
+      if (text.length <= MAX_SOURCE_CHARS) return false;
       text = text.slice(0, MAX_SOURCE_CHARS);
       truncated = true;
+      return true;
+    });
+    if (reachedLimit) {
       await reader.cancel();
       break;
     }
   }
-  if (!truncated) text += decoder.decode();
+  if (!truncated) runActivity(() => { text += decoder.decode(); });
   return [text, truncated];
 }

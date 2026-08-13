@@ -6,6 +6,7 @@ import type { NetworkCore } from '../core/network-core';
 import { formatDuration, formatTime } from '../utils/time';
 import { highlightJSON } from '../utils/json';
 import { escapeHTML } from '../utils/dom';
+import { runNconsoleActivity } from '../utils/performance-isolation';
 
 type SortKey = 'url' | 'method' | 'status' | 'duration' | 'type';
 type SortDir = 'asc' | 'desc';
@@ -138,23 +139,25 @@ export class NetworkPanel {
 
     if (this.renderRAF !== null) return;
     this.renderRAF = requestAnimationFrame(() => {
-      this.renderRAF = null;
-      const shouldRebuild = this.needsFullRefresh;
-      const pendingEntries = [...this.pendingEntryUpdates.values()];
-      this.needsFullRefresh = false;
-      this.pendingEntryUpdates.clear();
+      runNconsoleActivity(() => {
+        this.renderRAF = null;
+        const shouldRebuild = this.needsFullRefresh;
+        const pendingEntries = [...this.pendingEntryUpdates.values()];
+        this.needsFullRefresh = false;
+        this.pendingEntryUpdates.clear();
 
-      if (shouldRebuild) {
-        this.refreshTable();
-      } else {
-        for (const pendingEntry of pendingEntries) {
-          if (!this.updateTableRow(pendingEntry)) {
-            this.refreshTable();
-            break;
+        if (shouldRebuild) {
+          this.refreshTable();
+        } else {
+          for (const pendingEntry of pendingEntries) {
+            if (!this.updateTableRow(pendingEntry)) {
+              this.refreshTable();
+              break;
+            }
           }
         }
-      }
-      if (this.selectedId !== null) this.showDetail();
+        if (this.selectedId !== null) this.showDetail();
+      });
     });
   }
 

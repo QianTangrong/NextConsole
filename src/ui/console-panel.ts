@@ -6,6 +6,7 @@ import type { ConsoleCore } from '../core/console-core';
 import { formatTime } from '../utils/time';
 import { highlightJSON } from '../utils/json';
 import { escapeHTML } from '../utils/dom';
+import { runNconsoleActivity } from '../utils/performance-isolation';
 
 const MAX_RENDER = 500;
 
@@ -165,17 +166,19 @@ export class ConsolePanel {
     }
     if (this.renderRAF !== null) return;
     this.renderRAF = requestAnimationFrame(() => {
-      this.renderRAF = null;
-      if (this.needsRefresh) {
-        this.needsRefresh = false;
-        this.pendingEntries.clear();
-        this.refreshEntries();
-        return;
-      }
+      runNconsoleActivity(() => {
+        this.renderRAF = null;
+        if (this.needsRefresh) {
+          this.needsRefresh = false;
+          this.pendingEntries.clear();
+          this.refreshEntries();
+          return;
+        }
 
-      const entries = [...this.pendingEntries.values()];
-      this.pendingEntries.clear();
-      this.flushEntries(entries);
+        const entries = [...this.pendingEntries.values()];
+        this.pendingEntries.clear();
+        this.flushEntries(entries);
+      });
     });
   }
 

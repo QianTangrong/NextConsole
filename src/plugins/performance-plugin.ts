@@ -3,23 +3,13 @@
  */
 import type { NconsolePlugin, PluginAPI } from '../types/plugin';
 import { escapeHTML } from '../utils/dom';
+import {
+  formatBytes,
+  formatMilliseconds,
+  formatPerformanceMetric,
+  PerformanceSnapshotCollector,
+} from './performance-snapshot';
 
-interface PerfMetric {
-  name: string;
-  value: number;
-  unit: string;
-  rating: 'good' | 'needs-improvement' | 'poor';
-}
-
-interface ResourceEntry {
-  name: string;
-  type: string;
-  duration: number;
-  size: number;
-  startTime: number;
-}
-
-const MAX_LONG_TASKS = 200;
 const MAX_CUSTOM_MARKS = 100;
 const MAX_RENDERED_MARKS = 100;
 
@@ -61,6 +51,7 @@ const PERF_CSS = `
 .nc-perf-card-good { border-left-color: #3dc9b0; }
 .nc-perf-card-needs-improvement { border-left-color: #cca700; }
 .nc-perf-card-poor { border-left-color: #f14c4c; }
+.nc-perf-card-unrated { border-left-color: var(--nc-border); }
 .nc-perf-card-name {
   font-size: 10px;
   color: var(--nc-text-muted);
@@ -151,6 +142,12 @@ const PERF_CSS = `
   color: var(--nc-text-muted);
   padding: 16px;
 }
+.nc-perf-note {
+  color: var(--nc-text-muted);
+  font-size: 10px;
+  line-height: 1.5;
+  margin: 6px 0;
+}
 .nc-perf-mark-btn {
   padding: 2px 8px;
   background: var(--nc-bg);
@@ -164,171 +161,62 @@ const PERF_CSS = `
 .nc-perf-mark-btn:hover { background: var(--nc-bg-hover); }
 `;
 
-/** 以微秒、毫秒或秒显示耗时，减少小数噪音。 */
-function formatMs(ms: number): string {
-  if (ms < 1) return `${(ms * 1000).toFixed(0)} μs`;
-  if (ms < 1000) return `${ms.toFixed(1)} ms`;
-  return `${(ms / 1000).toFixed(2)} s`;
-}
-
-function formatBytes(b: number): string {
-  if (b <= 0) return '—';
-  if (b < 1024) return `${b} B`;
-  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
-  return `${(b / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-/** 基于 Web Vitals 阈值给出便于扫描的性能等级。 */
-function rateMetric(name: string, value: number): PerfMetric['rating'] {
-  // 阈值只服务于调试展示，不替代产品侧的性能监控标准。
-  switch (name) {
-    case 'FCP': return value <= 1800 ? 'good' : value <= 3000 ? 'needs-improvement' : 'poor';
-    case 'LCP': return value <= 2500 ? 'good' : value <= 4000 ? 'needs-improvement' : 'poor';
-    case 'FID': return value <= 100 ? 'good' : value <= 300 ? 'needs-improvement' : 'poor';
-    case 'CLS': return value <= 0.1 ? 'good' : value <= 0.25 ? 'needs-improvement' : 'poor';
-    case 'TTFB': return value <= 800 ? 'good' : value <= 1800 ? 'needs-improvement' : 'poor';
-    case 'INP': return value <= 200 ? 'good' : value <= 500 ? 'needs-improvement' : 'poor';
-    default: return 'good';
-  }
-}
-
-function getResourceType(entry: PerformanceResourceTiming): string {
-  const ext = entry.name.split('?')[0].split('.').pop()?.toLowerCase() || '';
-  if (['js', 'mjs'].includes(ext) || entry.initiatorType === 'script') return 'script';
-  if (['css'].includes(ext) || entry.initiatorType === 'css' || entry.initiatorType === 'link') return 'css';
-  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'avif'].includes(ext) || entry.initiatorType === 'img') return 'img';
-  if (['woff', 'woff2', 'ttf', 'otf', 'eot'].includes(ext)) return 'font';
-  return 'other';
-}
-
-function getShortName(url: string): string {
-  try {
-    const u = new URL(url);
-    const path = u.pathname.split('/').pop() || u.pathname;
-    return path.length > 40 ? path.slice(0, 37) + '...' : path;
-  } catch {
-    return url.slice(0, 40);
-  }
-}
-
-/** 从 Performance API 汇总核心体验指标，缺失的浏览器能力会被自然跳过。 */
-function collectCoreMetrics(): PerfMetric[] {
-  const metrics: PerfMetric[] = [];
-
-  // Navigation Timing
-  const navEntries = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
-  if (navEntries.length > 0) {
-    const nav = navEntries[0];
-
-    const ttfb = nav.responseStart - nav.requestStart;
-    if (ttfb > 0) metrics.push({ name: 'TTFB', value: ttfb, unit: 'ms', rating: rateMetric('TTFB', ttfb) });
-
-    const domReady = nav.domContentLoadedEventEnd - nav.startTime;
-    if (domReady > 0) metrics.push({ name: 'DOM Ready', value: domReady, unit: 'ms', rating: rateMetric('FCP', domReady) });
-
-    const load = nav.loadEventEnd - nav.startTime;
-    if (load > 0) metrics.push({ name: 'Load', value: load, unit: 'ms', rating: rateMetric('LCP', load) });
-
-    const dnsTime = nav.domainLookupEnd - nav.domainLookupStart;
-    if (dnsTime > 0) metrics.push({ name: 'DNS', value: dnsTime, unit: 'ms', rating: 'good' });
-
-    const tcpTime = nav.connectEnd - nav.connectStart;
-    if (tcpTime > 0) metrics.push({ name: 'TCP', value: tcpTime, unit: 'ms', rating: 'good' });
-  }
-
-  // Paint Timing
-  const paintEntries = performance.getEntriesByType('paint');
-  for (const entry of paintEntries) {
-    if (entry.name === 'first-paint') {
-      metrics.push({ name: 'FP', value: entry.startTime, unit: 'ms', rating: rateMetric('FCP', entry.startTime) });
-    }
-    if (entry.name === 'first-contentful-paint') {
-      metrics.push({ name: 'FCP', value: entry.startTime, unit: 'ms', rating: rateMetric('FCP', entry.startTime) });
-    }
-  }
-
-  // Memory
-  const mem = (performance as any).memory;
-  if (mem) {
-    metrics.push({ name: 'JS Heap', value: mem.usedJSHeapSize / (1024 * 1024), unit: 'MB', rating: mem.usedJSHeapSize / mem.jsHeapSizeLimit > 0.9 ? 'poor' : 'good' });
-    metrics.push({ name: 'Heap Limit', value: mem.jsHeapSizeLimit / (1024 * 1024), unit: 'MB', rating: 'good' });
-  }
-
-  return metrics;
-}
-
-/** 将资源时间线转为列表条目，不读取或暴露资源响应正文。 */
-function collectResources(): ResourceEntry[] {
-  return (performance.getEntriesByType('resource') as PerformanceResourceTiming[])
-    .map((r) => ({
-      name: r.name,
-      type: getResourceType(r),
-      duration: r.duration,
-      size: r.transferSize || 0,
-      startTime: r.startTime,
-    }))
-    .sort((a, b) => b.duration - a.duration);
-}
-
-function collectLongTasks(): { startTime: number; duration: number }[] {
-  // Long tasks from PerformanceObserver are not stored in the buffer by default,
-  // but we can check existing long-task entries if available.
-  try {
-    return (performance.getEntriesByType('longtask') as PerformanceEntry[])
-      .map((e) => ({ startTime: e.startTime, duration: e.duration }))
-      .sort((a, b) => b.duration - a.duration);
-  } catch {
-    return [];
-  }
-}
-
 /** 创建性能插件，并在可用时订阅长任务以补充资源时间线无法覆盖的卡顿。 */
 export function createPerformancePlugin(): NconsolePlugin {
   let container: HTMLElement;
-  let longTaskObserver: PerformanceObserver | null = null;
-  let longTasks: { startTime: number; duration: number }[] = [];
+  let pluginApi: PluginAPI | undefined;
+  const collector = new PerformanceSnapshotCollector();
   let customMarks: string[] = [];
   let nextCustomMarkId = 0;
 
+  function runActivity<T>(callback: () => T): T {
+    return pluginApi ? pluginApi.networkCore.getPerformanceIsolation().runActivity(callback) : callback();
+  }
+
   function render() {
-    const metrics = collectCoreMetrics();
-    const resources = collectResources();
-    const storedLongTasks = [...longTasks, ...collectLongTasks()];
-    // Deduplicate by startTime
-    const uniqueLT = new Map<number, { startTime: number; duration: number }>();
-    for (const lt of storedLongTasks) uniqueLT.set(lt.startTime, lt);
-    const sortedLT = [...uniqueLT.values()].sort((a, b) => b.duration - a.duration);
+    runActivity(() => {
+      const snapshot = collector.getSnapshot();
+      const { metrics, navigation } = snapshot;
+      const resources = snapshot.resources.slowest;
+      const sortedLT = snapshot.longTasks.entries;
 
     // Resource summary
-    const summary = new Map<string, { count: number; totalSize: number }>();
-    for (const r of resources) {
-      const s = summary.get(r.type) || { count: 0, totalSize: 0 };
-      s.count++;
-      s.totalSize += r.size;
-      summary.set(r.type, s);
-    }
+    const summary = new Map(snapshot.resources.byType.map((item) => [item.type, item]));
 
     // Core metrics cards
     const metricsHTML = metrics.length > 0
       ? metrics.map((m) => `
         <div class="nc-perf-card nc-perf-card-${m.rating}">
-          <div class="nc-perf-card-name">${escapeHTML(m.name)}</div>
-          <div class="nc-perf-card-value">${m.unit === 'ms' ? formatMs(m.value) : m.value.toFixed(1)}<span class="nc-perf-card-unit"> ${m.unit === 'ms' ? '' : m.unit}</span></div>
+          <div class="nc-perf-card-name">${escapeHTML(m.label)}</div>
+          <div class="nc-perf-card-value">${escapeHTML(formatPerformanceMetric(m))}</div>
         </div>`).join('')
       : '<div class="nc-perf-empty">No metrics available yet</div>';
 
+    const navigationRows = navigation
+      ? [
+        ['Redirect', navigation.redirectMs],
+        ['DNS', navigation.dnsMs],
+        ['TCP', navigation.tcpMs],
+        ['TLS', navigation.tlsMs],
+        ['Request / TTFB', navigation.requestMs],
+        ['Download', navigation.downloadMs],
+      ].filter((item): item is [string, number] => typeof item[1] === 'number')
+        .map(([label, duration]) => `<tr><td>${label}</td><td>${formatMilliseconds(duration)}</td></tr>`)
+        .join('')
+      : '';
+
     // Resource summary bars
-    const typeOrder = ['script', 'css', 'img', 'font', 'other'];
-    const totalSize = resources.reduce((a, r) => a + r.size, 0);
+    const typeOrder = ['script', 'css', 'img', 'font', 'other'] as const;
+    const totalSize = snapshot.resources.totalTransferSize;
     const summaryHTML = typeOrder
       .filter((t) => summary.has(t))
       .map((t) => {
         const s = summary.get(t)!;
-        const pct = totalSize > 0 ? (s.totalSize / totalSize * 100) : 0;
+        const pct = totalSize > 0 ? (s.transferSize / totalSize * 100) : 0;
         return `<div class="nc-perf-bar-wrap">
           <span class="nc-perf-bar-label">${t} (${s.count})</span>
           <div class="nc-perf-bar-track"><div class="nc-perf-bar-fill nc-perf-bar-fill-${t}" style="width:${Math.max(pct, 1)}%"></div></div>
-          <span class="nc-perf-bar-value">${formatBytes(s.totalSize)}</span>
+          <span class="nc-perf-bar-value">${formatBytes(s.transferSize)}</span>
         </div>`;
       }).join('');
 
@@ -336,18 +224,18 @@ export function createPerformancePlugin(): NconsolePlugin {
     const topResources = resources.slice(0, 30);
     const resourceRows = topResources.map((r) => `
       <tr>
-        <td title="${escapeHTML(r.name)}">${escapeHTML(getShortName(r.name))}</td>
+        <td title="${escapeHTML(r.url)}">${escapeHTML(r.displayName)}</td>
         <td>${r.type}</td>
-        <td>${formatMs(r.duration)}</td>
-        <td>${formatBytes(r.size)}</td>
+        <td>${formatMilliseconds(r.durationMs)}</td>
+        <td>${formatBytes(r.transferSize)}</td>
       </tr>`).join('');
 
     // Long tasks
     const longTaskHTML = sortedLT.length > 0
       ? sortedLT.slice(0, 20).map((lt) => `
         <tr>
-          <td>${formatMs(lt.startTime)}</td>
-          <td style="color:${lt.duration > 100 ? 'var(--nc-error)' : 'var(--nc-warn)'}">${formatMs(lt.duration)}</td>
+          <td>${formatMilliseconds(lt.startTimeMs)}</td>
+          <td style="color:${lt.durationMs > 100 ? 'var(--nc-error)' : 'var(--nc-warn)'}">${formatMilliseconds(lt.durationMs)}</td>
         </tr>`).join('')
       : '';
 
@@ -357,7 +245,7 @@ export function createPerformancePlugin(): NconsolePlugin {
       ? marks.map((m) => `
         <tr>
           <td>${escapeHTML(m.name)}</td>
-          <td>${formatMs(m.startTime)}</td>
+          <td>${formatMilliseconds(m.startTime)}</td>
         </tr>`).join('')
       : '';
 
@@ -371,11 +259,19 @@ export function createPerformancePlugin(): NconsolePlugin {
           <div class="nc-perf-section">
             <div class="nc-perf-section-title">Core Metrics</div>
             <div class="nc-perf-metrics">${metricsHTML}</div>
+            <div class="nc-perf-note">当前会话样本；Core Web Vitals 的正式结论应以真实用户第 75 百分位为准。</div>
+            <div class="nc-perf-note">已隔离 ${snapshot.dataQuality.selfIsolation.excludedResourceCount} 个 Nconsole 内部资源，并从 ${snapshot.dataQuality.selfIsolation.adjustedLongTaskCount} 个长任务中扣除 ${formatMilliseconds(snapshot.dataQuality.selfIsolation.excludedLongTaskDurationMs)} 工具耗时。</div>
           </div>
+
+          ${navigationRows ? `
+          <div class="nc-perf-section">
+            <div class="nc-perf-section-title">Navigation Breakdown</div>
+            <table class="nc-perf-table"><tr><th>Phase</th><th>Duration</th></tr>${navigationRows}</table>
+          </div>` : ''}
 
           ${summaryHTML ? `
           <div class="nc-perf-section">
-            <div class="nc-perf-section-title">Resource Breakdown (${resources.length} resources, ${formatBytes(totalSize)} total)</div>
+            <div class="nc-perf-section-title">Resource Breakdown (${snapshot.resources.count} resources, ${formatBytes(totalSize)} total)</div>
             ${summaryHTML}
           </div>` : ''}
 
@@ -408,37 +304,27 @@ export function createPerformancePlugin(): NconsolePlugin {
         </div>
       </div>`;
 
-    container.querySelector('.nc-perf-refresh')!.addEventListener('click', render);
-    container.querySelector('.nc-perf-mark')!.addEventListener('click', () => {
-      const name = `nc-mark-${++nextCustomMarkId}`;
-      performance.mark(name);
-      customMarks.push(name);
-      if (customMarks.length > MAX_CUSTOM_MARKS) {
-        const expiredMarks = customMarks.splice(0, customMarks.length - MAX_CUSTOM_MARKS);
-        for (const expiredMark of expiredMarks) performance.clearMarks(expiredMark);
-      }
-      render();
+      container.querySelector('.nc-perf-refresh')!.addEventListener('click', render);
+      container.querySelector('.nc-perf-mark')!.addEventListener('click', () => {
+        const name = `nc-mark-${++nextCustomMarkId}`;
+        performance.mark(name);
+        customMarks.push(name);
+        if (customMarks.length > MAX_CUSTOM_MARKS) {
+          const expiredMarks = customMarks.splice(0, customMarks.length - MAX_CUSTOM_MARKS);
+          for (const expiredMark of expiredMarks) performance.clearMarks(expiredMark);
+        }
+        render();
+      });
     });
   }
 
   return {
     name: 'performance',
     version: '1.0.0',
-    init() {
-      // Start observing long tasks
-      try {
-        longTaskObserver = new PerformanceObserver((list) => {
-          for (const entry of list.getEntries()) {
-            longTasks.push({ startTime: entry.startTime, duration: entry.duration });
-          }
-          if (longTasks.length > MAX_LONG_TASKS) {
-            longTasks.splice(0, longTasks.length - MAX_LONG_TASKS);
-          }
-        });
-        longTaskObserver.observe({ type: 'longtask', buffered: true });
-      } catch {
-        // Long Task API not supported
-      }
+    init(api) {
+      pluginApi = api;
+      collector.setPerformanceIsolation(api.networkCore.getPerformanceIsolation());
+      collector.start();
     },
     tab: {
       label: 'Perf',
@@ -452,9 +338,8 @@ export function createPerformancePlugin(): NconsolePlugin {
       },
     },
     destroy() {
-      longTaskObserver?.disconnect();
-      longTaskObserver = null;
-      longTasks = [];
+      collector.destroy();
+      pluginApi = undefined;
       // Clean up custom marks
       for (const name of customMarks) {
         try { performance.clearMarks(name); } catch { /* noop */ }
