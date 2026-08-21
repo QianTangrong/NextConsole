@@ -1,14 +1,14 @@
 {
   "files": {
-    "nconsole.es.mjs": { "rawBytes": 185000, "gzipBytes": 50000 },
+    "nconsole.es.mjs": { "rawBytes": 198000, "gzipBytes": 53000 },
     "nconsole.cjs": { "rawBytes": 1000, "gzipBytes": 500 },
-    "nconsole.umd.js": { "rawBytes": 158000, "gzipBytes": 46000 },
-    "nconsole.min.js": { "rawBytes": 158000, "gzipBytes": 46000 },
+    "nconsole.umd.js": { "rawBytes": 170000, "gzipBytes": 49000 },
+    "nconsole.min.js": { "rawBytes": 170000, "gzipBytes": 49000 },
     "lite.mjs": { "rawBytes": 115000, "gzipBytes": 29000 },
     "nconsole.lite.min.js": { "rawBytes": 100000, "gzipBytes": 27000 },
     "core.mjs": { "rawBytes": 33000, "gzipBytes": 8700 },
     "plugins/source.mjs": { "rawBytes": 8000, "gzipBytes": 2800 },
     "plugins/performance.mjs": { "rawBytes": 24500, "gzipBytes": 8100 },
-    "plugins/mimo-ai-diagnosis.mjs": { "rawBytes": 53000, "gzipBytes": 17000 }
+    "plugins/mimo-ai-diagnosis.mjs": { "rawBytes": 64000, "gzipBytes": 19000 }
   }
 }
