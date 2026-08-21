@@ -20,6 +20,7 @@ export class FloatButton {
   private snapTimer: ReturnType<typeof setTimeout> | null = null;
   private moveFrame: number | null = null;
   private pendingPosition: { x: number; y: number } | null = null;
+  private suppressNextClick = false;
 
   constructor(
     private container: ShadowRoot,
@@ -71,10 +72,10 @@ export class FloatButton {
     // Pointer Events 统一鼠标、触摸与触控笔，避免为同一拖动链路维护两套监听器。
     const onEnd = () => {
       if (!this.isDragging) return;
-      if (!this.dragStarted) this.onClick();
-      else {
+      if (this.dragStarted) {
         this.flushPosition();
         this.snapToEdge();
+        this.suppressNextClick = true;
       }
       this.isDragging = false;
       this.dragStarted = false;
@@ -85,6 +86,7 @@ export class FloatButton {
         event.preventDefault();
         this.isDragging = true;
         this.dragStarted = false;
+        this.suppressNextClick = false;
         this.startX = event.clientX;
         this.startY = event.clientY;
         this.offsetX = this.el.offsetLeft;
@@ -102,6 +104,15 @@ export class FloatButton {
         this.isDragging = false;
         this.dragStarted = false;
         this.pendingPosition = null;
+      }),
+      // 普通点击必须等 click 到达按钮后再切换层级，避免 pointerup 后续 click 命中新出现的遮罩。
+      on(this.el, 'click', (event: MouseEvent) => {
+        event.preventDefault();
+        if (this.suppressNextClick) {
+          this.suppressNextClick = false;
+          return;
+        }
+        this.onClick();
       }),
     );
 
